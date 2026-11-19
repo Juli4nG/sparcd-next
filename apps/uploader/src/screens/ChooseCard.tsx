@@ -89,11 +89,11 @@ export function ChooseCard({ card, onCard, onNext }: Props) {
             </p>
             <p className="font-body text-[14px] text-inkSoft mb-5">
               {state === 'failed' ? (
-                'Check the card is still plugged in, then choose the folder again.'
+                'Check it’s still plugged in, then choose the folder again.'
               ) : (
                 <>
                   The folder was read but held no <span className="font-mono">.jpg</span>/
-                  <span className="font-mono">.jpeg</span> files. This tool uploads JPEG — choose the card’s folder.
+                  <span className="font-mono">.jpeg</span> files. This tool uploads JPEG — choose another folder.
                 </>
               )}
             </p>

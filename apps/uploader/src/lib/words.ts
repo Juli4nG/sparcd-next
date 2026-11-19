@@ -11,6 +11,9 @@ export function timeLeft(ms: number): string {
   return `About ${count(hours, 'hour')}${rest ? ` ${count(rest, 'minute')}` : ''} left`;
 }
 
+/** "4.2 MB per second". */
+export const speed = (bytesPerSecond: number) => `${formatBytes(bytesPerSecond)} per second`;
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB'];

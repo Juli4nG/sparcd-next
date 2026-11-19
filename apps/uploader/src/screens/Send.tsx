@@ -3,7 +3,7 @@ import { S3Error, deploymentId, type Lab, type Session, type Site } from '@sparc
 import type { CardFile } from '../lib/scan';
 import { PhotoError, sendCard, type Outcome, type Progress } from '../lib/send';
 import { useOnline } from '@sparcd/auth-ui';
-import { folderName, formatBytes, number, timeLeft } from '../lib/words';
+import { folderName, formatBytes, number, speed, timeLeft } from '../lib/words';
 import { primaryButton, sectionLabel } from '../ui/fn';
 import { Note } from '../ui/Note';
 import type { ReadResult } from '../workers/photo.worker';
@@ -27,7 +27,7 @@ function explain(err: unknown): Problem {
   if (cause instanceof S3Error && cause.status === 403)
     return { message: 'Your sign-in has stopped working. Sign in again to carry on.', signIn: true };
   if (cause instanceof Error && cause.name === 'NotFoundError')
-    return { message: 'The card couldn’t be read. Make sure it’s still plugged in, then press Try again.' };
+    return { message: 'The folder couldn’t be read. Make sure it’s still plugged in, then press Try again.' };
   return { message: '', connection: true };
 }
 
@@ -76,7 +76,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
   const [error, setError] = useState<Problem>();
   const [attempt, setAttempt] = useState(0);
   const reads = useRef(new Map<File, ReadResult>());
-  const [eta, setEta] = useState<string>();
+  const [eta, setEta] = useState<{ left: string; speed?: string }>();
   const latest = useRef<Progress>();
   latest.current = progress;
   const online = useOnline();
@@ -101,6 +101,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
   // smoothed and shown only once a few readings in a row agree.
   useEffect(() => {
     let smoothed: number | undefined;
+    let byteRate: number | undefined;
     let steady = 0;
     let phase: string | undefined;
     const id = setInterval(() => {
@@ -109,6 +110,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
       if (p.phase !== phase) {
         phase = p.phase;
         smoothed = undefined;
+        byteRate = undefined;
         steady = 0;
         setEta(undefined);
       }
@@ -118,7 +120,12 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
       const rate = (p.done - base) / elapsed;
       smoothed = smoothed === undefined ? rate : smoothed * 0.85 + rate * 0.15;
       steady = Math.abs(rate - smoothed) / smoothed < 0.2 ? steady + 1 : 0;
-      if (steady >= 5) setEta(timeLeft((p.total - p.done) / smoothed));
+      if (p.phase === 'sending') {
+        const bytesPerMs = p.bytes / elapsed;
+        byteRate = byteRate === undefined ? bytesPerMs : byteRate * 0.85 + bytesPerMs * 0.15;
+      }
+      if (steady >= 5)
+        setEta({ left: timeLeft((p.total - p.done) / smoothed), speed: byteRate ? speed(byteRate * 1000) : undefined });
     }, 1000);
     return () => clearInterval(id);
   }, [attempt]);
@@ -189,7 +196,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
         <p className="font-body text-[13px] text-inkSoft">
           <span className="font-mono text-ink">{number(done)}</span> of{' '}
           <span className="font-mono text-ink">{number(total)}</span>{' '}
-          {progress?.phase === 'sending' ? 'photos sent' : 'photos ready'}
+          {progress?.phase === 'sending' ? 'photos uploaded' : 'photos ready'}
         </p>
         <div
           className="h-2 bg-paperHover border border-ruleSoft overflow-hidden"
@@ -200,7 +207,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
         >
           <span className={`block h-full ${stopped ? 'bg-warn' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
         </div>
-        {!online && <Note tone="warn" message="No internet. Sending will carry on when it’s back." />}
+        {!online && <Note tone="warn" message="No internet. Uploading will carry on when it’s back." />}
         {stopped ? (
           <>
             <Note tone="warn" message={error!.message} />
@@ -218,7 +225,12 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
           </>
         ) : (
           <>
-            {eta && <p className="font-body text-[13px] text-inkSoft">{eta}</p>}
+            {eta && (
+              <p className="font-body text-[13px] text-inkSoft">
+                {eta.speed && `${eta.speed} · `}
+                {eta.left}
+              </p>
+            )}
             <p className="font-body text-[13px] text-inkSoft">Keep this page open until it’s done.</p>
           </>
         )}

@@ -51,7 +51,7 @@ export function CardsSent({ session, sites }: { session: Session; sites: Site[] 
       <div className="max-w-2xl mx-auto">
         <div className="border border-ruleSoft bg-panel px-6 py-12 text-center">
           <p className="font-display text-[18px] text-ink mb-1">No uploads yet</p>
-          <p className="font-body text-[14px] text-inkSoft">Cards you upload are listed here.</p>
+          <p className="font-body text-[14px] text-inkSoft">Your uploads are listed here.</p>
         </div>
       </div>
     );

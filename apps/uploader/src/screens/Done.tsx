@@ -13,8 +13,8 @@ export function Done({ outcome, site, onAnother }: { outcome: Outcome; site: Sit
         <p className="font-display text-[18px] text-ink mb-1">{kept ? 'Upload complete' : 'Upload failed'}</p>
         <p className="font-body text-[14px] text-inkSoft">
           {kept > 0 && alreadySaved === kept
-            ? `Already saved: all ${count(kept, 'photo')}. Nothing new to send from this card.`
-            : `Sent ${count(kept - alreadySaved, 'photo')} to ${site.locationName}.`}
+            ? `Already saved: all ${count(kept, 'photo')}. Nothing new to upload.`
+            : `Uploaded ${count(kept - alreadySaved, 'photo')} to ${site.locationName}.`}
           {kept > 0 && alreadySaved > 0 && alreadySaved < kept && ` Already saved: ${number(alreadySaved)}.`}
         </p>
       </div>
@@ -32,7 +32,7 @@ export function Done({ outcome, site, onAnother }: { outcome: Outcome; site: Sit
           </ul>
         </div>
       )}
-      {!kept && <Note tone="warn" message="No photos could be sent." />}
+      {!kept && <Note tone="warn" message="No photos could be uploaded." />}
       <div className="flex justify-center gap-3">
         <button onClick={onAnother} className={backButton}>
           New upload

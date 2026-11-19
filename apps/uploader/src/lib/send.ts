@@ -21,7 +21,7 @@ const PARALLEL = 6;
 
 export type Progress =
   | { phase: 'reading'; done: number; total: number; startedAt: number }
-  | { phase: 'sending'; done: number; total: number; startedAt: number; sentBefore: number };
+  | { phase: 'sending'; done: number; total: number; startedAt: number; sentBefore: number; bytes: number };
 
 export type Outcome = {
   total: number;
@@ -99,7 +99,8 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const sentBefore = unread.length + plan.skip.length + plan.rowOnly.length;
     let done = sentBefore;
     let startedAt = performance.now();
-    job.onProgress({ phase: 'sending', done, total, startedAt, sentBefore });
+    let bytes = 0;
+    job.onProgress({ phase: 'sending', done, total, startedAt, sentBefore, bytes });
 
     let saving: Promise<unknown> = Promise.resolve();
     const save = (rows: Media[]): Promise<PackageRows> => {
@@ -122,13 +123,13 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const pending: Media[] = [];
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
       try {
-        await putPhoto(session, photo, missing, pool);
+        bytes += await putPhoto(session, photo, missing, pool);
         pending.push(mediaRow(photo, deploymentID));
       } catch (err) {
         if (!photoProblem(err)) throw new PhotoError(photo.path, err);
         leftOut.push(photo.file.name);
       }
-      job.onProgress({ phase: 'sending', done: ++done, total, startedAt, sentBefore });
+      job.onProgress({ phase: 'sending', done: ++done, total, startedAt, sentBefore, bytes });
       if (pending.length >= CHECKPOINT_EVERY) await save(pending.splice(0));
     };
 
@@ -165,14 +166,16 @@ export async function sendCard(job: Job): Promise<Outcome> {
  * Every file is made before any is stored, so a photo that can't be decoded
  * never has its original stored. The original goes up without its camera data.
  */
-async function putPhoto(session: Session, photo: Photo, missing: string[], pool: Pool) {
+async function putPhoto(session: Session, photo: Photo, missing: string[], pool: Pool): Promise<number> {
   const keys = keysOf(photo);
   const put = (key: string, body: ArrayBuffer, sha256: string) =>
     session.bucket.putObject(key, new Uint8Array(body), { contentType: 'image/jpeg', sha256 });
   const d = await pool.derive(photo.file);
-  await Promise.all([
-    missing.includes('thumb') && put(keys.thumb, d.thumb, d.thumbSha256),
-    missing.includes('view') && put(keys.view, d.view, d.viewSha256),
-    missing.includes('original') && put(keys.original, d.original, d.originalSha256),
-  ]);
+  const parts = [
+    missing.includes('thumb') && ([keys.thumb, d.thumb, d.thumbSha256] as const),
+    missing.includes('view') && ([keys.view, d.view, d.viewSha256] as const),
+    missing.includes('original') && ([keys.original, d.original, d.originalSha256] as const),
+  ].filter((p) => !!p);
+  await Promise.all(parts.map(([key, body, sha]) => put(key, body, sha)));
+  return parts.reduce((n, [, body]) => n + body.byteLength, 0);
 }
