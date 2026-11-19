@@ -22,8 +22,6 @@ type Bytes = Uint8Array<ArrayBuffer>;
 
 const MAX_ATTEMPTS = 5;
 const BASE_BACKOFF_MS = 500;
-const MULTIPART_ABOVE = 16 * 1024 * 1024;
-const PART_SIZE = 8 * 1024 * 1024;
 
 const encode = (s: string) =>
   encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -90,7 +88,8 @@ class Connection {
         aws: { allHeaders: true },
       });
       try {
-        const res = await fetch(request);
+        // A re-read before a merge has to reach storage, never a browser cache.
+        const res = await fetch(request, { cache: 'no-store' });
         if ((res.status < 500 && res.status !== 429) || attempt === MAX_ATTEMPTS) return res;
         await res.body?.cancel();
       } catch (err) {
@@ -101,12 +100,7 @@ class Connection {
   }
 }
 
-export type PutOptions = {
-  contentType: string;
-  sha256?: string;
-  /** Write-once: `If-None-Match: *`, and an existing object returns `'exists'`. */
-  ifNoneMatch?: boolean;
-};
+export type PutOptions = { contentType: string; sha256?: string };
 
 export class Bucket {
   constructor(
@@ -130,52 +124,23 @@ export class Bucket {
     await this.putObject(key, new TextEncoder().encode(text), { contentType });
   }
 
+  /**
+   * One PUT. Everything under `Media/` is write-once (`If-None-Match: *`), and
+   * an existing photo answers `'exists'`. There is no multipart: Ceph ignores
+   * If-None-Match on CompleteMultipartUpload, and photos fit one PUT.
+   */
   async putObject(key: string, body: Blob | Bytes, opts: PutOptions): Promise<'stored' | 'exists'> {
     const bytes = body instanceof Uint8Array ? body : new Uint8Array(await body.arrayBuffer());
-    if (bytes.byteLength > MULTIPART_ABOVE) return this.putMultipart(key, bytes, opts);
     const res = await ok(
       await this.connection.send(this.path(key), {
         method: 'PUT',
-        headers: { 'content-type': opts.contentType, ...(opts.ifNoneMatch && { 'if-none-match': '*' }) },
+        headers: { 'content-type': opts.contentType, ...(key.startsWith('Media/') && { 'if-none-match': '*' }) },
         body: bytes,
         sha256: opts.sha256,
       }),
       412,
     );
     return res.status === 412 ? 'exists' : 'stored';
-  }
-
-  private async putMultipart(key: string, bytes: Bytes, opts: PutOptions): Promise<'stored' | 'exists'> {
-    const path = this.path(key);
-    const created = await ok(
-      await this.connection.send(path, { method: 'POST', query: { uploads: '' }, headers: { 'content-type': opts.contentType } }),
-    );
-    const [uploadId] = xmlValues(await created.text(), 'UploadId');
-    let outcome: 'stored' | 'exists' | undefined;
-    try {
-      const parts: string[] = [];
-      for (let n = 1, at = 0; at < bytes.byteLength; n++, at += PART_SIZE) {
-        const query = { partNumber: String(n), uploadId };
-        const res = await ok(await this.connection.send(path, { method: 'PUT', query, body: bytes.subarray(at, at + PART_SIZE) }));
-        parts.push(`<Part><PartNumber>${n}</PartNumber><ETag>${res.headers.get('etag')}</ETag></Part>`);
-      }
-      const res = await ok(
-        await this.connection.send(path, {
-          method: 'POST',
-          query: { uploadId },
-          headers: { 'content-type': 'application/xml', ...(opts.ifNoneMatch && { 'if-none-match': '*' }) },
-          body: new TextEncoder().encode(`<CompleteMultipartUpload>${parts.join('')}</CompleteMultipartUpload>`),
-        }),
-        412,
-      );
-      // CompleteMultipartUpload can fail with a 200 that carries an <Error> body.
-      const text = await res.text();
-      if (res.status === 200 && text.includes('<Error>')) throw new S3Error(500, `S3 multipart: ${text.slice(0, 300)}`);
-      outcome = res.status === 412 ? 'exists' : 'stored';
-    } finally {
-      if (outcome !== 'stored') await this.connection.send(path, { method: 'DELETE', query: { uploadId } }).catch(() => {});
-    }
-    return outcome;
   }
 
   async listKeys(prefix: string): Promise<string[]> {

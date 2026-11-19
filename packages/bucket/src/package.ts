@@ -9,6 +9,10 @@ export type About = { personName: string; lab: Lab };
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
+/** One writer per bucket across this browser's tabs (the Uploader and the Tagger share an origin). */
+const exclusive = <T>(bucket: Bucket, fn: () => Promise<T>): Promise<T> =>
+  globalThis.navigator?.locks ? (navigator.locks.request(`sparcd-next:${bucket.name}`, fn) as Promise<T>) : fn();
+
 export async function readTable<T extends Table>(bucket: Bucket, table: T): Promise<PackageRows[T]> {
   const text = await bucket.getText(`${table}.csv`);
   return text === null ? ([] as unknown as PackageRows[T]) : parseTable(table, text);
@@ -39,23 +43,29 @@ async function saveTable<T extends Table>(bucket: Bucket, table: T, change?: (cu
  * (each re-read just before its merge), then datapackage.json. Photo files
  * must already be stored. Returns the rows as written.
  */
-export async function savePackage(bucket: Bucket, changes: Changes, about: About): Promise<PackageRows> {
-  const deployments = await saveTable(bucket, 'deployments', changes.deployments);
-  const media = await saveTable(bucket, 'media', changes.media);
-  const observations = await saveTable(bucket, 'observations', changes.observations);
-  const datapackage = buildDatapackage({ name: bucket.name, ...about, deployments, observations });
-  await bucket.putText('datapackage.json', json(datapackage));
-  return { deployments, media, observations };
+export function savePackage(bucket: Bucket, changes: Changes, about: About): Promise<PackageRows> {
+  return exclusive(bucket, async () => {
+    const deployments = await saveTable(bucket, 'deployments', changes.deployments);
+    const media = await saveTable(bucket, 'media', changes.media);
+    const observations = await saveTable(bucket, 'observations', changes.observations);
+    const datapackage = buildDatapackage({ name: bucket.name, ...about, deployments, observations });
+    await bucket.putText('datapackage.json', json(datapackage));
+    return { deployments, media, observations };
+  });
 }
 
 const WEEK = 604_800;
 
 /**
- * Generates `shared/<id>/` from the owner's rows and returns the signed URL of
+ * Generates `shared/<id>/` from the owner's current rows and returns the signed URL of
  * its datapackage.json. The link to hand out is
  * `<origin>/tag/#share=<encodeURIComponent(url)>`.
  */
-export async function writeShare(bucket: Bucket, rows: PackageRows, share: ShareRecipe, about: About): Promise<string> {
+export function writeShare(bucket: Bucket, share: ShareRecipe, about: About): Promise<string> {
+  return exclusive(bucket, async () => writeShareFiles(bucket, await readPackage(bucket), share, about));
+}
+
+async function writeShareFiles(bucket: Bucket, rows: PackageRows, share: ShareRecipe, about: About): Promise<string> {
   const dir = `shared/${share.id}`;
   const sign = (key: string) => bucket.presignGet(key, { expiresSeconds: WEEK });
   const tables = shareTables(rows, share);

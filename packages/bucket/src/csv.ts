@@ -67,6 +67,7 @@ function parseRows(text: string): string[][] {
       endRow();
     } else field += c;
   }
+  if (quoted) throw new Error('CSV has an unclosed quote');
   if (field !== '' || row.length) endRow();
   return rows;
 }
@@ -75,6 +76,7 @@ function parseRows(text: string): string[][] {
 export function parseCsv(text: string): Record<string, string>[] {
   const [header, ...body] = parseRows(text.replace(/^﻿/, ''));
   if (!header) return [];
+  if (new Set(header).size !== header.length) throw new Error('CSV repeats a column name');
   return body.map((cells) => Object.fromEntries(header.map((name, i) => [name, cells[i] ?? ''])));
 }
 

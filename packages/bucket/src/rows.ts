@@ -85,9 +85,13 @@ export type ShareRecipe = {
   image: 'view';
 };
 
-/** The CSV rows of a share package. Each `filePath` is the image's key, for the caller to sign. */
+/**
+ * The CSV rows of a share package: public photos without a human tag. Each
+ * `filePath` is the image's key, for the caller to sign.
+ */
 export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows {
   const ids = new Set(share.deploymentIDs);
+  const human = new Set(rows.observations.filter((o) => o.observationType === 'human').map((o) => o.mediaID));
   const round = (v: string) => Number(v).toFixed(share.positionDecimals);
   const group = `share:${share.id}`;
   return {
@@ -102,7 +106,7 @@ export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows 
         deploymentGroups: d.deploymentGroups ? `${d.deploymentGroups} | ${group}` : group,
       })),
     media: rows.media
-      .filter((m) => ids.has(m.deploymentID) && m.filePublic === 'true')
+      .filter((m) => ids.has(m.deploymentID) && m.filePublic === 'true' && !human.has(m.mediaID))
       .map((m) => ({ ...m, filePath: `Media/${m.mediaID}/${share.image}.jpg` })),
     observations: [],
   };

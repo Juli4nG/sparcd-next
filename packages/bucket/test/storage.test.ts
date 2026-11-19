@@ -42,12 +42,12 @@ describe('storage', () => {
     const body = new TextEncoder().encode('jpeg bytes');
     const sha = createHash('sha256').update(body).digest('hex');
     const key = `Media/${sha}/My Photo (1)+&.JPG`;
-    expect(await bucket.putObject(key, body, { contentType: 'image/jpeg', sha256: sha, ifNoneMatch: true })).toBe('stored');
+    expect(await bucket.putObject(key, body, { contentType: 'image/jpeg', sha256: sha })).toBe('stored');
     const put = s3.requests.at(-1)!;
     expect(put.url.pathname).toBe(`/sparcd-next-ana/Media/${sha}/My%20Photo%20%281%29%2B%26.JPG`);
     expect(put.headers.get('x-amz-content-sha256')).toBe(sha);
     expect(signedHeaders(put.headers)).toEqual(expect.arrayContaining(['content-type', 'if-none-match', 'x-amz-content-sha256', 'host']));
-    expect(await bucket.putObject(key, new Blob([body]), { contentType: 'image/jpeg', ifNoneMatch: true })).toBe('exists');
+    expect(await bucket.putObject(key, new Blob([body]), { contentType: 'image/jpeg' })).toBe('exists');
     expect(s3.requests.at(-1)!.headers.get('x-amz-content-sha256')).toBe(sha);
   });
 
@@ -74,19 +74,14 @@ describe('storage', () => {
     expect(await bucket.listKeys('Media/')).toEqual(['Media/a/1.jpg', 'Media/a/thumb.jpg', 'Media/b/R&D.jpg']);
   });
 
-  it('sends bodies over 16 MB as multipart, and aborts when the file exists', async () => {
+  it('sends a large photo in one PUT, and only Media/ is write-once', async () => {
     const { bucket } = await signIn(gate, 'ana', 'pw');
     const big = new Uint8Array(17 * 1024 * 1024).map((_, i) => i % 251);
-    expect(await bucket.putObject('Media/x/big.jpg', big, { contentType: 'image/jpeg', ifNoneMatch: true })).toBe('stored');
-    const hash = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-    expect(hash(s3.objects.get('sparcd-next-ana/Media/x/big.jpg')!.body)).toBe(hash(big));
-    const parts = s3.requests.filter((r) => r.url.searchParams.has('partNumber'));
-    expect(parts.map((p) => p.body.byteLength)).toEqual([8 << 20, 8 << 20, 1 << 20]);
-    for (const p of parts) expect(p.headers.get('x-amz-content-sha256')).toBe(hash(p.body));
-    expect(s3.requests.find((r) => r.url.searchParams.has('uploads'))!.url.search).toBe('?uploads');
-
-    expect(await bucket.putObject('Media/x/big.jpg', big, { contentType: 'image/jpeg', ifNoneMatch: true })).toBe('exists');
-    expect(s3.requests.at(-1)!.method).toBe('DELETE');
+    expect(await bucket.putObject('Media/x/big.jpg', big, { contentType: 'image/jpeg' })).toBe('stored');
+    expect(s3.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
+    expect(await bucket.putObject('Media/x/big.jpg', big, { contentType: 'image/jpeg' })).toBe('exists');
+    await bucket.putText('media.csv', 'mediaID\n');
+    expect(s3.requests.at(-1)!.headers.get('if-none-match')).toBeNull();
   });
 
   it('presigns hour-stable URLs', async () => {
