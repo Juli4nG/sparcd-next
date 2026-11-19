@@ -327,7 +327,7 @@ export function NewUpload() {
                   kept otherwise.{' '}
                 </>
               )}
-              {summary.noCameraTime > 0 && 'A timestamp needs review in Assign before upload.'}
+              {summary.noCameraTime > 0 && 'Photos without a camera time get a time estimated from nearby photos.'}
             </p>
           )}
         </div>

@@ -86,11 +86,14 @@ export function DeploymentPicker({ locations, value, onChange, elevationUnit = '
         <div className="flex gap-2">
           <dt className="w-10 shrink-0 text-inkSoft">Elev</dt>
           <dd className="truncate">
+            {/* sites.csv carries no elevation. */}
+            {!Number.isFinite(loc.elevation) ? '—' : <>
             <span className={elevationUnit === 'meters' ? 'text-ink' : ''}>{loc.elevation} m</span>
             {' · '}
             <span className={elevationUnit === 'feet' ? 'text-ink' : ''}>
               {metersToFeet(loc.elevation)} ft
             </span>
+            </>}
           </dd>
         </div>
       </dl>
@@ -169,7 +172,8 @@ export function DeploymentPicker({ locations, value, onChange, elevationUnit = '
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-body text-[14px] text-ink">{loc.name}</span>
                     <span className="block truncate font-mono text-[12px] text-inkMute">
-                      {loc.id} · {loc.elevation} m
+                      {loc.id}
+                      {Number.isFinite(loc.elevation) && ` · ${loc.elevation} m`}
                     </span>
                   </span>
                   <button

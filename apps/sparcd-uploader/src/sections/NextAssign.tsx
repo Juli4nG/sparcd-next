@@ -17,7 +17,7 @@ export const siteLocation = (s: Site): Location => ({
   name: s.locationName,
   latitude: s.latitude,
   longitude: s.longitude,
-  elevation: 0,
+  elevation: NaN,
 });
 
 function LocationsState({ message, tone }: { message: string; tone: 'mute' | 'warn' }) {
