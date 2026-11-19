@@ -67,4 +67,4 @@ export {
   type Session,
   type PutOptions,
 } from './storage';
-export { readTable, readPackage, savePackage, writeShare, type Changes, type About } from './package';
+export { readTable, readPackage, savePackage, writeShare, createShare, type Changes, type About } from './package';

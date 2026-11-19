@@ -1,9 +1,10 @@
 import { parseTable, serializeTable, type PackageRows, type Table } from './csv';
 import { buildDatapackage } from './datapackage';
-import { thumbKey } from './ids';
+import { newShareId, thumbKey } from './ids';
 import { shareTables, type ShareRecipe } from './rows';
 import type { Lab } from './settings';
 import type { Bucket } from './storage';
+import { formatInZone } from './times';
 
 export type About = { personName: string; lab: Lab };
 
@@ -81,8 +82,31 @@ async function writeShareFiles(bucket: Bucket, rows: PackageRows, share: ShareRe
     sharePaths[table] = await sign(`${dir}/${table}.csv`);
   }
   await bucket.putText(`${dir}/thumbs.json`, json(thumbs));
+  const shareThumbs = await sign(`${dir}/thumbs.json`);
   const name = `${bucket.name}-share-${share.id}`;
-  const datapackage = buildDatapackage({ name, ...about, ...tables, sharePaths });
+  const datapackage = buildDatapackage({ name, ...about, ...tables, sharePaths, shareThumbs });
   await bucket.putText(`${dir}/datapackage.json`, json(datapackage));
   return sign(`${dir}/datapackage.json`);
+}
+
+/**
+ * Shares one card for 7 days: appends a recipe to `shares.json` and writes its
+ * share package, under the same lock as package saves. Returns the signed URL
+ * of the share's datapackage.json.
+ */
+export function createShare(bucket: Bucket, deploymentID: string, about: About, now = Date.now()): Promise<string> {
+  return exclusive(bucket, async () => {
+    const at = (ms: number) => formatInZone(ms, about.lab.timeZone);
+    const share: ShareRecipe = {
+      id: newShareId(),
+      createdAt: at(now),
+      expiresAt: at(now + WEEK * 1000),
+      deploymentIDs: [deploymentID],
+      positionDecimals: 1,
+      image: 'view',
+    };
+    const { shares } = JSON.parse((await bucket.getText('shares.json')) ?? '{"shares":[]}') as { shares: ShareRecipe[] };
+    await bucket.putText('shares.json', json({ shares: [...shares, share] }));
+    return writeShareFiles(bucket, await readPackage(bucket), share, about);
+  });
 }

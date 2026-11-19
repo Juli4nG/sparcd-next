@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   applyFilePublic, cameraTime, deploymentId, ESTIMATED_TIME_COMMENT, estimateTimes, mergeDeployments, mergeMedia,
-  originalKey, parseSites, readPackage, replaceObservations, savePackage, signIn, tagRows, timeRange, writeShare,
+  createShare, originalKey, parseSites, readPackage, replaceObservations, savePackage, signIn, tagRows, timeRange, writeShare,
   type Deployment, type Lab, type Media, type Session, type Site, type Tag,
 } from '../src';
 import { fakeS3 } from './fakeS3';
@@ -135,7 +135,22 @@ describe('a sample package', () => {
     const media = s3.text(`sparcd-next-ana/shared/${share.id}/media.csv`).trim().split('\n');
     expect(media).toHaveLength(6); // header + the 5 public photos of that card
     expect(Object.keys(JSON.parse(s3.text(`sparcd-next-ana/shared/${share.id}/thumbs.json`)))).toHaveLength(5);
+    expect(new URL(dp.sparcdThumbs).pathname).toBe(`/sparcd-next-ana/shared/${share.id}/thumbs.json`);
     mkdirSync(join(sampleDir, 'share'), { recursive: true });
     writeFileSync(join(sampleDir, 'share', 'datapackage.json'), JSON.stringify(dp, null, 2));
+  });
+
+  it('creates a share: recipe appended to shares.json, then its package', async () => {
+    const now = Date.parse('2026-11-19T16:00:00Z');
+    const first = new URL(await createShare(session.bucket, 'mesa-top_2026-11-18', about, now));
+    await createShare(session.bucket, 'juniper-draw_2026-11-17', about, now);
+    const { shares } = JSON.parse(s3.text('sparcd-next-ana/shares.json'));
+    expect(shares).toHaveLength(2);
+    expect(shares[0]).toMatchObject({
+      createdAt: '2026-11-19T09:00:00-07:00', expiresAt: '2026-11-26T09:00:00-07:00',
+      deploymentIDs: ['mesa-top_2026-11-18'], positionDecimals: 1, image: 'view',
+    });
+    expect(first.pathname).toBe(`/sparcd-next-ana/shared/${shares[0].id}/datapackage.json`);
+    expect(s3.text(`sparcd-next-ana/shared/${shares[0].id}/media.csv`).trim().split('\n')).toHaveLength(5);
   });
 });
