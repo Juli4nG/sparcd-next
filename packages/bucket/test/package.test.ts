@@ -140,7 +140,7 @@ describe('a sample package', () => {
     writeFileSync(join(sampleDir, 'share', 'datapackage.json'), JSON.stringify(dp, null, 2));
   });
 
-  it('creates a share: recipe appended to shares.json, then its package', async () => {
+  it('creates the share package and appends its recipe to shares.json', async () => {
     const now = Date.parse('2026-11-19T16:00:00Z');
     const first = new URL(await createShare(session.bucket, 'mesa-top_2026-11-18', about, now));
     await createShare(session.bucket, 'juniper-draw_2026-11-17', about, now);

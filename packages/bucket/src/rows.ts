@@ -90,7 +90,7 @@ export type ShareRecipe = {
  * `filePath` is the image's key, for the caller to sign.
  */
 export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows {
-  const ids = new Set(share.deploymentIDs);
+  const ids = new Map(share.deploymentIDs.map((id, i) => [id, `${share.id}-${i + 1}`]));
   const human = new Set(rows.observations.filter((o) => o.observationType === 'human').map((o) => o.mediaID));
   const round = (v: string) => Number(v).toFixed(share.positionDecimals);
   const group = `share:${share.id}`;
@@ -99,6 +99,8 @@ export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows 
       .filter((d) => ids.has(d.deploymentID))
       .map((d) => ({
         ...d,
+        deploymentID: ids.get(d.deploymentID)!,
+        locationID: '',
         latitude: round(d.latitude),
         longitude: round(d.longitude),
         coordinateUncertainty: '8000',
@@ -107,7 +109,7 @@ export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows 
       })),
     media: rows.media
       .filter((m) => ids.has(m.deploymentID) && m.filePublic === 'true' && !human.has(m.mediaID))
-      .map((m) => ({ ...m, filePath: `Media/${m.mediaID}/${share.image}.jpg` })),
+      .map((m) => ({ ...m, deploymentID: ids.get(m.deploymentID)!, filePath: `Media/${m.mediaID}/${share.image}.jpg` })),
     observations: [],
   };
 }

@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react';
-import { createShare, type Deployment, type Session } from '@sparcd/bucket';
-import { loadSettings } from '../data/card';
-import { shareLink } from '../data/share';
+import type { Deployment } from '@sparcd/bucket';
 import { cardTitle } from '../dates';
 import { Dialog, DialogHeader } from '../ui/Dialog';
 
-/** Makes a new 7-day link for one of the person's own cards, ready to copy. */
-export function ShareDialog({ session, deployment, onClose }: { session: Session; deployment: Deployment; onClose: () => void }) {
-  const [link, setLink] = useState<string | 'failed' | null>(null);
+export function ShareDialog({ deployment, result, onClose }: { deployment: Deployment; result: Promise<string | null>; onClose: () => void }) {
+  const [link, setLink] = useState<string | null>();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    loadSettings(session)
-      .then(({ about }) => createShare(session.bucket, deployment.deploymentID, about))
-      .then((url) => setLink(shareLink(url)), () => setLink('failed'));
-  }, [session, deployment]);
+    let open = true;
+    result.then((url) => { if (open) setLink(url); });
+    return () => { open = false; };
+  }, [result]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(link!);
@@ -28,7 +25,7 @@ export function ShareDialog({ session, deployment, onClose }: { session: Session
           Anyone you send this link to can tag these photos for 7 days. They won't see exactly where the camera was, or any photo you marked as
           having people in it.
         </p>
-        {link === 'failed' ? (
+        {link === null ? (
           <p role="alert" className="text-warn">We couldn't make a link. Check your internet connection, then try again.</p>
         ) : !link ? (
           <p role="status" className="text-inkMute">Making the link…</p>

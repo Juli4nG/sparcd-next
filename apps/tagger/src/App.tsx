@@ -54,7 +54,7 @@ export function App() {
           Sign out
         </button>
       </header>
-      <div className="flex-1 min-h-0">{shareUrl ? <SharePage key={shareUrl} session={session} url={shareUrl} /> : cardId ? <CardPage key={cardId} session={session} cardId={cardId} /> : <CardList session={session} />}</div>
+      <div className="flex-1 min-h-0">{shareUrl !== null ? <SharePage key={shareUrl} session={session} url={shareUrl} endpoint={config.endpoint} /> : cardId ? <CardPage key={cardId} session={session} cardId={cardId} /> : <CardList session={session} />}</div>
     </div>
   );
 }

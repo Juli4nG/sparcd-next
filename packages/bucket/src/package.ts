@@ -90,8 +90,8 @@ async function writeShareFiles(bucket: Bucket, rows: PackageRows, share: ShareRe
 }
 
 /**
- * Shares one card for 7 days: appends a recipe to `shares.json` and writes its
- * share package, under the same lock as package saves. Returns the signed URL
+ * Shares one card for 7 days: writes its share package and appends a recipe to
+ * `shares.json`, under the same lock as package saves. Returns the signed URL
  * of the share's datapackage.json.
  */
 export function createShare(bucket: Bucket, deploymentID: string, about: About, now = Date.now()): Promise<string> {
@@ -106,7 +106,8 @@ export function createShare(bucket: Bucket, deploymentID: string, about: About, 
       image: 'view',
     };
     const { shares } = JSON.parse((await bucket.getText('shares.json')) ?? '{"shares":[]}') as { shares: ShareRecipe[] };
+    const url = await writeShareFiles(bucket, await readPackage(bucket), share, about);
     await bucket.putText('shares.json', json({ shares: [...shares, share] }));
-    return writeShareFiles(bucket, await readPackage(bucket), share, about);
+    return url;
   });
 }

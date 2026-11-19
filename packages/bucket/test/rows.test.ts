@@ -107,18 +107,20 @@ describe('tagRows', () => {
 
 describe('shareTables', () => {
   it('keeps only shared, public, not-human rows with rounded positions', () => {
-    const share = { id: 'k3', createdAt: '', expiresAt: '', deploymentIDs: ['juniper-draw_2026-11-17'], positionDecimals: 1, image: 'view' as const };
+    const share = { id: 'k3', createdAt: '', expiresAt: '', deploymentIDs: ['mesa_2026-11-17', 'juniper-draw_2026-11-17'], positionDecimals: 1, image: 'view' as const };
     const d = deployment('2026-11-02T06:00:00-07:00', '2026-11-10T06:00:00-07:00', { locationName: 'Juniper Draw', deploymentGroups: 'area:East' });
     const out = shareTables(
       {
-        deployments: [d, { ...d, deploymentID: 'mesa_2026-11-17' }],
+        deployments: [d, { ...d, deploymentID: 'mesa_2026-11-17' }, { ...d, deploymentID: 'other_2026-11-17' }],
         media: [media(M1), media(M2, { filePublic: 'false' }), media(M3)],
         observations: [{ mediaID: M3, observationType: 'human' } as Observation],
       },
       share,
     );
-    expect(out.deployments).toEqual([{ ...d, latitude: '31.8', longitude: '-110.6', coordinateUncertainty: '8000', locationName: '', deploymentGroups: 'area:East | share:k3' }]);
-    expect(out.media.map((m) => m.filePath)).toEqual([`Media/${M1}/view.jpg`]);
+    expect(out.deployments).toEqual(['k3-2', 'k3-1'].map((deploymentID) => ({
+      ...d, deploymentID, locationID: '', latitude: '31.8', longitude: '-110.6', coordinateUncertainty: '8000', locationName: '', deploymentGroups: 'area:East | share:k3',
+    })));
+    expect(out.media.map((m) => [m.deploymentID, m.filePath])).toEqual([['k3-2', `Media/${M1}/view.jpg`]]);
     expect(out.observations).toEqual([]);
   });
 });

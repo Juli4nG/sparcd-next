@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { readPackage, savePackage, signIn, type Deployment, type Lab, type Media, type Session } from '@sparcd/bucket';
+import { createShare, readPackage, savePackage, signIn, type Deployment, type Lab, type Media, type Session } from '@sparcd/bucket';
 import { fakeS3 } from '../../../packages/bucket/test/fakeS3';
 import { saveTags, type Card } from '../src/data/card';
-import { linkExpired } from '../src/data/share';
+import { LinkGone, linkExpired, loadShareCard } from '../src/data/share';
 import type { PhotoTag } from '../src/data/tags';
 
 const lab: Lab = { title: 'Example Lab', timeZone: 'America/Phoenix', shareLicenses: [] };
 const about = { personName: 'Ana', lab };
 const s3 = fakeS3();
+const endpoint = 'https://server.example.org';
 let session: Session;
 
 const id = 'juniper-draw_2026-11-17';
@@ -23,8 +24,21 @@ const copied = photo('b', 'https://server.example.org/sparcd-next-olive/Media/b/
 const human: PhotoTag[] = [{ key: 'Homo sapiens', observationType: 'human', scientificName: 'Homo sapiens', count: 1 }];
 
 beforeAll(async () => {
-  vi.stubGlobal('fetch', s3.fetch);
-  session = await signIn({ gate: true, endpoint: 'https://server.example.org', region: 'us-east-1' }, 'ana', 'pw');
+  vi.stubGlobal('fetch', (input: RequestInfo, init?: RequestInit) => s3.fetch(new Request(input, init)));
+  session = await signIn({ gate: true, endpoint, region: 'us-east-1' }, 'ana', 'pw');
+});
+
+it('accepts a share package and rejects links or resources outside its origin and folder', async () => {
+  await savePackage(session.bucket, { deployments: () => [deployment('')], media: () => [mine], observations: () => [] }, about);
+  const url = await createShare(session.bucket, id, about);
+  await expect(loadShareCard(session, url, endpoint)).resolves.toMatchObject({ own: false, photos: [{ mediaID: mine.mediaID }] });
+  await expect(loadShareCard(session, url.replace(endpoint, 'https://another.example.org'), endpoint)).rejects.toBeInstanceOf(LinkGone);
+  await expect(loadShareCard(session, url.replace('/shared/', '/private/'), endpoint)).rejects.toBeInstanceOf(LinkGone);
+
+  const key = new URL(url).pathname.replace('/sparcd-next-ana/', '');
+  const dp = (await session.bucket.getText(key))!;
+  await session.bucket.putText(key, dp.replace('/sparcd-next-ana/shared/', '/sparcd-next-olive/shared/'));
+  await expect(loadShareCard(session, url, endpoint)).rejects.toBeInstanceOf(LinkGone);
 });
 afterAll(() => vi.unstubAllGlobals());
 

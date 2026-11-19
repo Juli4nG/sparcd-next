@@ -7,12 +7,18 @@ export function useImageUrl(card: Card, mediaID: string, size: ImageSize): { url
   const key = `${mediaID}/${size}`;
   useEffect(() => {
     let live = true;
+    let objectUrl: string | undefined;
     card.imageUrl(mediaID, size).then(
-      (url) => live && setState({ key, url, failed: false }),
+      (url) => {
+        if (url.startsWith('blob:')) objectUrl = url;
+        if (live) setState({ key, url, failed: false });
+        else if (objectUrl) URL.revokeObjectURL(objectUrl);
+      },
       () => live && setState({ key, failed: true }),
     );
     return () => {
       live = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [card, mediaID, size, key]);
   return state.key === key ? state : { failed: false };

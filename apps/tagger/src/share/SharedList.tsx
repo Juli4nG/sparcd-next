@@ -1,6 +1,5 @@
-import { linkExpired, type SharedSummary } from '../data/share';
+import { BROKEN_LINK, linkExpired, type SharedSummary } from '../data/share';
 import { cardTitle } from '../dates';
-import { EXPIRED } from './SharePage';
 
 /** Cards other people shared, which the person has tagged in; reopened from the link saved in this browser. */
 export function SharedList({ cards }: { cards: SharedSummary[] }) {
@@ -15,7 +14,7 @@ export function SharedList({ cards }: { cards: SharedSummary[] }) {
               <p className="text-[17px] text-inkSoft">{c.tagged.toLocaleString()} photos tagged by you</p>
               {(!c.link || linkExpired(c.link)) && (
                 <p className="text-[17px] text-warn">
-                  {c.link ? EXPIRED : "The link isn't saved on this computer. Ask the person who sent it to send it again."}
+                  {c.link ? BROKEN_LINK : "The link isn't saved on this computer. Ask the person who sent it to send it again."}
                 </p>
               )}
             </div>

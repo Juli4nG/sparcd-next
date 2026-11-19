@@ -124,17 +124,18 @@ step(`shared with you: ${(await r.getByTestId('shared-row').innerText()).replace
 const broken = new URL(shareUrl);
 broken.searchParams.set('X-Amz-Signature', '0'.repeat(64));
 await r.goto(`${origin}/tag/#share=${encodeURIComponent(broken.href)}`);
-await r.getByText('This link has expired. Ask the person who sent it for a new one.').waitFor();
-await shot(r, '05-expired-link');
+const brokenMessage = "This link doesn't work any more. Ask the person who sent it for a new one.";
+await r.getByText(brokenMessage).waitFor();
+await shot(r, '05-broken-link');
 await r.evaluate(() => {
   const links = JSON.parse(localStorage.getItem('sparcd-next.tagger.shareLinks'));
   for (const id in links) links[id] = links[id].replace(/X-Amz-Date=\d{8}/, 'X-Amz-Date=20260101');
   localStorage.setItem('sparcd-next.tagger.shareLinks', JSON.stringify(links));
 });
 await r.goto(`${origin}/tag/`);
-await r.getByTestId('shared-row').getByText('This link has expired.').waitFor();
+await r.getByTestId('shared-row').getByText(brokenMessage).waitFor();
 await shot(r, '06-shared-with-you-expired');
-step('a broken link and an expired saved link both say the link has expired');
+step('the broken link and the expired saved link both show the broken-link message');
 
 const recipientFiles = await download(recipient, recipientPw);
 const ownerAfter = await download(owner, ownerPw);
