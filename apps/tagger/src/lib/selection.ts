@@ -30,3 +30,13 @@ export function nextVisibleIndex(visible: number[], focus: number, direction: 1 
 export function nearestVisibleIndex(visible: number[], focus: number): number | undefined {
   return visible.find((i) => i >= focus) ?? visible[visible.length - 1];
 }
+
+/** The chosen photos the filter still shows, in card order. */
+export const shownChoice = (selected: Set<number>, visible: Set<number>): number[] =>
+  [...selected].filter((i) => visible.has(i)).sort((a, b) => a - b);
+
+/** What a tag lands on: the chosen photos still shown, else the focused photo when it's shown. */
+export function tagTargets(selected: Set<number>, focus: number, visible: Set<number>): number[] {
+  const chosen = shownChoice(selected, visible);
+  return chosen.length ? chosen : visible.has(focus) ? [focus] : [];
+}

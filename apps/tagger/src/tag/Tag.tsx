@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { About, Session, Species } from '@sparcd/bucket';
+import { groupBursts } from '../data/bursts';
 import type { Card } from '../data/card';
 import type { SaveStatus } from '../data/saver';
 import { addTag, incrementTag, NOTHING, removeTag, setCount, speciesKey, tagState, type PhotoTag } from '../data/tags';
 import { useTagging } from '../data/useTagging';
 import { effectiveKey, keyLabel, resolveKeys, useKeyOverrides } from '../lib/keys';
-import { nearestVisibleIndex, nextVisibleIndex, toggleSelectionWithFocus, visibleRangeSet } from '../lib/selection';
+import { nearestVisibleIndex, nextVisibleIndex, shownChoice, tagTargets, toggleSelectionWithFocus, visibleRangeSet } from '../lib/selection';
 import { StandaloneModifierGesture } from '../lib/standaloneModifier';
 import { useSpeciesResults } from '../lib/useSpeciesResults';
 import { Dialog, DialogHeader } from '../ui/Dialog';
@@ -13,7 +14,7 @@ import { AppliedSpecies, NOTHING_LABEL } from './AppliedSpecies';
 import { Cheatsheet } from './Cheatsheet';
 import { FocusView } from './FocusView';
 import { Grid, type PickMods } from './Grid';
-import { applySpeciesBinding, handleKey, modifierTarget, type KeyAction, type KeyContext } from './keyboard';
+import { applySpeciesBinding, handleKey, isTyping, modifierTarget, type KeyAction, type KeyContext } from './keyboard';
 import { SpeciesPanel } from './SpeciesPanel';
 
 type Filter = 'all' | 'untagged' | 'tagged';
@@ -67,13 +68,16 @@ export function Tag({ session, about, species, card, title }: { session: Session
 
   const current = photos[focus];
   const currentTags = (current && tags.get(current.mediaID)) || NONE;
-  const hasTarget = selected.size > 0 || visibleSet.has(focus);
+  const chosen = useMemo(() => shownChoice(selected, visibleSet), [selected, visibleSet]);
+  const targets = useMemo(() => tagTargets(selected, focus, visibleSet), [selected, focus, visibleSet]);
+  const hasTarget = targets.length > 0;
+  const bursts = useMemo(() => groupBursts(photos), [photos]);
 
   // A pending count belongs to the photo it was typed on.
   useEffect(() => setCountPrefix(''), [focus]);
   useEffect(() => {
-    if (selected.size > 1) setCountPrefix('');
-  }, [selected.size]);
+    if (chosen.length > 1) setCountPrefix('');
+  }, [chosen.length]);
   // A filter change can hide the focused photo: land on the nearest one shown.
   useEffect(() => {
     setSelected((s) => (s.size ? new Set([...s].filter((i) => visibleSet.has(i))) : s));
@@ -116,8 +120,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
     const target = nextVisibleIndex(visible, focus, direction);
     if (target !== undefined) goTo(target);
   };
-  const targetIds = () =>
-    (selected.size ? [...selected].sort((a, b) => a - b) : visibleSet.has(focus) ? [focus] : []).map((i) => photos[i].mediaID);
+  const targetIds = () => targets.map((i) => photos[i].mediaID);
 
   /** After a tag, move on once, skipping photos the filter now hides. */
   const advanceFrom = (after: Map<string, PhotoTag[]>) => {
@@ -129,7 +132,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
   const apply = (tag: PhotoTag) => {
     const ids = targetIds();
     if (!ids.length) return;
-    const moves = advance && (selected.size > 0 || !currentTags.some((t) => t.key === tag.key));
+    const moves = advance && (chosen.length > 0 || !currentTags.some((t) => t.key === tag.key));
     const after = edit(ids, (list) => addTag(list, tag));
     if (moves) advanceFrom(after);
   };
@@ -147,16 +150,26 @@ export function Tag({ session, about, species, card, title }: { session: Session
         setSelected(visibleRangeSet(visible, anchor, i));
         setFocus(i);
       } else if (mods.add) {
-        setSelected(toggleSelectionWithFocus(selected, focus, i));
+        setSelected(toggleSelectionWithFocus(new Set(chosen), visibleSet.has(focus) ? focus : i, i));
         setFocus(i);
         setAnchor(i);
       } else goTo(i);
     },
-    [visible, anchor, selected, focus],
+    [visible, visibleSet, anchor, chosen, focus],
   );
   const pickRef = useRef(pick);
   pickRef.current = pick;
   const stablePick = useCallback((i: number, mods: PickMods) => pickRef.current(i, mods), []);
+  // Tab onto a tile makes it the photo the keys act on.
+  const stableFocusTile = useCallback((i: number) => {
+    setFocus(i);
+    setAnchor(i);
+  }, []);
+  const selectBurst = () => {
+    if (!visibleSet.has(focus)) return;
+    setSelected(new Set(bursts.find((b) => b.includes(focus))!.filter((i) => visibleSet.has(i))));
+    setAnchor(focus);
+  };
 
   // --- The large view ------------------------------------------------------
   const openFocus = useCallback((i?: number) => {
@@ -200,15 +213,17 @@ export function Tag({ session, about, species, card, title }: { session: Session
   const context: KeyContext = {
     view,
     hasTarget,
-    selectedCount: selected.size,
+    selectedCount: chosen.length,
     keyMap,
     capturingFor,
     countPrefix,
     search,
     displayed,
-    searchInput: searchRef.current,
+    get searchInput() {
+      return searchRef.current;
+    },
     modalOpen,
-    focusedHas: (key) => currentTags.some((t) => t.key === key),
+    targetHas: (key) => targets.length === 1 && !!tags.get(photos[targets[0]].mediaID)?.some((t) => t.key === key),
     setCountPrefix,
     captureKey,
     stopCapture: () => setCapturingFor(null),
@@ -216,6 +231,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
     increment,
     move: step,
     clearSelection: () => setSelected(new Set()),
+    selectBurst,
     openFocus: () => openFocus(),
     closeFocus,
     openCheatsheet: () => setCheatsheet(true),
@@ -252,6 +268,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
       } else if (applySpeciesBinding(s, key)) e.preventDefault();
     };
     const cancel = () => g.cancel();
+    const onFocusIn = (e: FocusEvent) => contextRef.current.capturingFor && isTyping(e.target) && contextRef.current.stopCapture();
     const reset = () => g.reset();
     const pointerDown = (e: PointerEvent) => g.pointerDown(e.pointerId);
     const pointerUp = (e: PointerEvent) => g.pointerUp(e.pointerId);
@@ -262,6 +279,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
     window.addEventListener('pointerdown', pointerDown, true);
     window.addEventListener('pointerup', pointerUp, true);
     window.addEventListener('pointercancel', pointerUp, true);
+    document.addEventListener('focusin', onFocusIn);
     window.addEventListener('blur', reset);
     document.addEventListener('visibilitychange', reset);
     for (const name of cancelEvents) document.addEventListener(name, cancel, { capture: true, passive: true });
@@ -272,6 +290,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
       window.removeEventListener('pointerdown', pointerDown, true);
       window.removeEventListener('pointerup', pointerUp, true);
       window.removeEventListener('pointercancel', pointerUp, true);
+      document.removeEventListener('focusin', onFocusIn);
       window.removeEventListener('blur', reset);
       document.removeEventListener('visibilitychange', reset);
       for (const name of cancelEvents) document.removeEventListener(name, cancel, true);
@@ -293,7 +312,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
       onClearKey={keys.clear}
       keysUnsaved={keys.unsaved}
       applied={new Set(currentTags.map((t) => t.key))}
-      selectionCount={selected.size}
+      selectionCount={chosen.length}
       disabled={!hasTarget}
       selectedKey={highlighted}
       onSelect={setHighlighted}
@@ -301,7 +320,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
       onZoom={setZoom}
       header={
         <div className="space-y-2">
-          {countPrefix && selected.size <= 1 && (
+          {countPrefix && chosen.length <= 1 && (
             <span role="status" className="inline-block border border-accent px-2 py-1 text-[15px] font-mono text-accent">
               How many: {countPrefix}
             </span>
@@ -328,7 +347,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
               onClick={clearAll}
               disabled={!hasTarget}
               className="min-h-11 px-2 text-[15px] text-inkSoft hover:text-warn underline decoration-dotted disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-              title={selected.size ? `Remove every species from the ${selected.size} chosen photos` : 'Remove every species from this photo'}
+              title={chosen.length ? `Remove every species from the ${chosen.length} chosen photos` : 'Remove every species from this photo'}
             >
               Clear Species
             </button>
@@ -389,7 +408,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
           ))}
         </div>
         <span className="shrink-0 min-w-[11rem] text-[16px] text-inkSoft">
-          {selected.size > 0 ? <span className="text-accent">{selected.size} chosen</span> : position > 0 && `Photo ${position.toLocaleString()} of ${visible.length.toLocaleString()}`}
+          {chosen.length > 0 ? <span className="text-accent">{chosen.length} chosen</span> : position > 0 && `Photo ${position.toLocaleString()} of ${visible.length.toLocaleString()}`}
         </span>
         <label className="shrink-0 inline-flex items-center gap-2 min-h-11 text-[16px] text-inkSoft">
           <input
@@ -409,7 +428,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
         </label>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px]">
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_clamp(280px,32vw,400px)]">
         {visible.length ? (
           <Grid
             card={card}
@@ -419,6 +438,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
             selected={selected}
             summarize={summarize}
             onPick={stablePick}
+            onFocusTile={stableFocusTile}
             onOpen={openFocus}
           />
         ) : (
@@ -483,9 +503,10 @@ export function Tag({ session, about, species, card, title }: { session: Session
 }
 
 function SaveIndicator({ status }: { status: SaveStatus }) {
-  const text = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: "Couldn't save just now. Trying again; keep this page open." }[status];
+  const text = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: 'Not saved yet. Trying again…' }[status];
+  // A fixed box, two lines at most, so a message never moves the buttons beside it.
   return (
-    <span role="status" data-save-status={status} className={`text-[16px] text-right ${status === 'error' ? 'text-warn max-w-[22rem]' : 'min-w-[7rem] text-ok'}`}>
+    <span role="status" data-save-status={status} className={`shrink-0 w-[9rem] text-[16px] leading-tight text-right ${status === 'error' ? 'text-warn' : 'text-ok'}`}>
       {text}
     </span>
   );

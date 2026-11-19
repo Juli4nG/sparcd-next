@@ -30,7 +30,7 @@ function context(over: Partial<KeyContext> = {}): KeyContext {
     displayed: [],
     searchInput: null,
     modalOpen: false,
-    focusedHas: () => false,
+    targetHas: () => false,
     setCountPrefix: vi.fn(),
     captureKey: vi.fn(),
     stopCapture: vi.fn(),
@@ -38,6 +38,7 @@ function context(over: Partial<KeyContext> = {}): KeyContext {
     increment: vi.fn(),
     move: vi.fn(),
     clearSelection: vi.fn(),
+    selectBurst: vi.fn(),
     openFocus: vi.fn(),
     closeFocus: vi.fn(),
     openCheatsheet: vi.fn(),
@@ -88,6 +89,27 @@ describe('species keys', () => {
     handleKey(key('Escape'), s);
     expect(s.setCountPrefix).toHaveBeenLastCalledWith('');
     expect(s.closeFocus).not.toHaveBeenCalled();
+  });
+});
+
+describe('choosing', () => {
+  it('Ctrl+A chooses the burst; Shift+Space does nothing', () => {
+    const s = context();
+    handleKey(key('a', { ctrlKey: true }), s);
+    expect(s.selectBurst).toHaveBeenCalled();
+    const shiftSpace = key(' ', { shiftKey: true });
+    handleKey(shiftSpace, s);
+    expect(shiftSpace.preventDefault).toHaveBeenCalled();
+    expect(s.increment).not.toHaveBeenCalled();
+    expect(s.apply).not.toHaveBeenCalled();
+  });
+
+  it('typing in a field stops "Set key" instead of binding the letter', () => {
+    const input = { tagName: 'INPUT' } as unknown as HTMLInputElement;
+    const s = context({ capturingFor: 'Canis latrans' });
+    handleKey(key('q', { target: input }), s);
+    expect(s.stopCapture).toHaveBeenCalled();
+    expect(s.captureKey).not.toHaveBeenCalled();
   });
 });
 

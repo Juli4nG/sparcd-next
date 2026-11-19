@@ -1,32 +1,60 @@
 import { useEffect, useState } from 'react';
 import type { Card, ImageSize } from '../data/card';
 
-/** A photo's signed image URL; undefined until it's signed, or when signing failed. */
-export function useImageUrl(card: Card, mediaID: string, size: ImageSize): { url?: string; failed: boolean } {
+type ImageState = { url?: string; failed: boolean; retry: () => void };
+
+/**
+ * A photo's signed image URL; undefined until it's signed. `failed` when
+ * signing or loading failed. A load error signs a fresh URL once by itself,
+ * since a long session can outlive a signature; after that `retry` does.
+ */
+export function useImageUrl(card: Card, mediaID: string, size: ImageSize): ImageState & { onError: () => void } {
   const [state, setState] = useState<{ key: string; url?: string; failed: boolean }>({ key: '', failed: false });
+  const [attempt, setAttempt] = useState({ key: '', n: 0 });
   const key = `${mediaID}/${size}`;
+  const n = attempt.key === key ? attempt.n : 0;
   useEffect(() => {
     let live = true;
-    card.imageUrl(mediaID, size).then(
+    card.imageUrl(mediaID, size, n > 0).then(
       (url) => live && setState({ key, url, failed: false }),
       () => live && setState({ key, failed: true }),
     );
     return () => {
       live = false;
     };
-  }, [card, mediaID, size, key]);
-  return state.key === key ? state : { failed: false };
+  }, [card, mediaID, size, key, n]);
+  const retry = () => setAttempt({ key, n: n + 1 });
+  const onError = () => (n === 0 ? retry() : setState({ key, url: state.url, failed: true }));
+  return { ...(state.key === key ? state : { failed: false }), retry, onError };
+}
+
+function TryAgain({ onClick }: { onClick: () => void }) {
+  return (
+    <span
+      role="button"
+      tabIndex={-1}
+      data-testid="photo-retry"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className="min-h-9 px-2 inline-flex items-center border border-rule bg-paper text-[14px] text-ink underline"
+    >
+      Try again
+    </span>
+  );
 }
 
 /** The grid's 4:3 thumbnail; the photo fades in over a quiet placeholder. */
 export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt: string }) {
-  const { url, failed } = useImageUrl(card, mediaID, 'thumb');
+  const { url, failed, retry, onError } = useImageUrl(card, mediaID, 'thumb');
   const [loaded, setLoaded] = useState<string>();
-  const [broken, setBroken] = useState<string>();
-  if (failed || (url && broken === url)) {
+  if (failed) {
     return (
-      <div className="aspect-[4/3] bg-paperHover border border-rule grid place-items-center text-[13px] text-warn">
+      <div className="aspect-[4/3] bg-paperHover border border-rule flex flex-col items-center justify-center gap-1 text-[13px] text-warn">
         Photo didn't load
+        <TryAgain onClick={retry} />
       </div>
     );
   }
@@ -40,7 +68,7 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
           loading="lazy"
           decoding="async"
           onLoad={() => setLoaded(url)}
-          onError={() => setBroken(url)}
+          onError={onError}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-150 ${loaded === url ? 'opacity-100' : 'opacity-0'}`}
         />
       )}

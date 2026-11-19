@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { tagRows, type Media } from '@sparcd/bucket';
-import { addTag, incrementTag, NOTHING, tagsFromRows, toBucketTags, type PhotoTag } from '../src/data/tags';
+import { addTag, eventsFromRows, incrementTag, NOTHING, tagsFromRows, toBucketTags, type PhotoTag } from '../src/data/tags';
 
 const coyote: PhotoTag = { key: 'Canis latrans', observationType: 'animal', scientificName: 'Canis latrans', count: 1 };
 const unknown: PhotoTag = { key: 'unknown', observationType: 'unknown', scientificName: '', count: 2 };
@@ -25,5 +25,16 @@ describe('tags', () => {
     const tags = [coyote, unknown];
     expect(tagsFromRows(tagRows(media, toBucketTags(tags), 'ana').reverse()).get(media.mediaID)).toEqual(tags);
     expect(tagsFromRows(tagRows(media, toBucketTags([NOTHING]), 'ana')).get(media.mediaID)).toEqual([NOTHING]);
+  });
+});
+
+describe('eventsFromRows', () => {
+  it("keeps a photo's eventID only when all its rows share one", () => {
+    const rows = [
+      ...tagRows(media, [{ observationType: 'animal', scientificName: 'Canis latrans', count: 1 }, { observationType: 'unknown', count: 1 }], 'jd', { eventID: 'burst-1' }),
+      ...tagRows({ ...media, mediaID: 'g' }, [{ observationType: 'unknown', count: 1 }], 'jd', { eventID: 'burst-2' }),
+      ...tagRows({ ...media, mediaID: 'g' }, [{ observationType: 'blank' }], 'kl'),
+    ];
+    expect(eventsFromRows(rows)).toEqual(new Map([[media.mediaID, 'burst-1']]));
   });
 });
