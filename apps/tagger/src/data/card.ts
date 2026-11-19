@@ -1,6 +1,8 @@
 import {
   applyFilePublic,
   instant,
+  mergeDeployments,
+  mergeMedia,
   parseLab,
   parseSpecies,
   readPackage,
@@ -11,6 +13,7 @@ import {
   viewKey,
   type About,
   type Bucket,
+  type Changes,
   type Deployment,
   type Media,
   type PackageRows,
@@ -60,7 +63,7 @@ export function cardSummaries(rows: PackageRows): CardSummary[] {
   return [...byCard.values()].sort((a, b) => instant(b.deployment.deploymentEnd) - instant(a.deployment.deploymentEnd));
 }
 
-const byTime = (a: Media, b: Media) =>
+export const byTime = (a: Media, b: Media) =>
   instant(a.timestamp) - instant(b.timestamp) || (a.fileName ?? '').localeCompare(b.fileName ?? '', 'en', { numeric: true });
 
 const hour = () => Math.floor(Date.now() / 3_600_000);
@@ -94,9 +97,14 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
   };
 }
 
+/** A row copied from a share points at a signed `https://` URL; the person's own photos are `Media/...` keys. */
+const isOwnRow = (m: Media) => !/^https?:\/\//.test(m.filePath);
+
 /**
  * One package write for every photo in `ids`: re-read, replace those photos'
- * rows, apply the owner's filePublic rule, then datapackage.json.
+ * rows, then datapackage.json. Ownership is decided per photo: the person's own
+ * photos get the filePublic rule, and tagged photos from a share get their card
+ * and photo rows copied in, insert-only.
  */
 export async function saveTags(
   session: Session,
@@ -108,12 +116,14 @@ export async function saveTags(
 ): Promise<void> {
   const media = new Map(card.photos.map((m) => [m.mediaID, m]));
   const rows = ids.flatMap((id) => tagRows(media.get(id)!, toBucketTags(tagsOf(id)), session.code, { timestamp: editedAt(id) }));
-  await savePackage(
-    session.bucket,
-    {
-      ...(card.own && { media: (m: Media[]) => applyFilePublic(m, rows, ids) }),
-      observations: (o) => replaceObservations(o, ids, rows),
+  const copies = ids.map((id) => media.get(id)!).filter((m) => !isOwnRow(m) && tagsOf(m.mediaID).length);
+  const rowChanges: Changes = {
+    ...(copies.length && { deployments: (d: Deployment[]) => mergeDeployments(d, [card.deployment], 'insert') }),
+    media: (current) => {
+      const merged = mergeMedia(current, copies);
+      const saved = new Set(ids);
+      return applyFilePublic(merged, rows, merged.filter((m) => saved.has(m.mediaID) && isOwnRow(m)).map((m) => m.mediaID));
     },
-    about,
-  );
+  };
+  await savePackage(session.bucket, { ...rowChanges, observations: (o) => replaceObservations(o, ids, rows) }, about);
 }
