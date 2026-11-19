@@ -27,6 +27,9 @@ export type ConnectionProps = {
    *  into a caller's own layout (e.g. mid-wizard, asking to connect only once
    *  a step needs it) instead of taking over the whole viewport. */
   embedded?: boolean;
+  /** Behind the SPARC'd Next gate the server is this page's own origin, so
+   *  the endpoint field and Advanced are hidden and the endpoint is fixed. */
+  sameOrigin?: boolean;
 };
 
 const fieldLabel = 'block font-[600] text-[11px] tracking-[0.16em] uppercase text-inkSoft mb-1.5';
@@ -48,9 +51,10 @@ export function Connection({
   onTestConnection,
   onSkip,
   embedded,
+  sameOrigin,
 }: ConnectionProps) {
   const rememberHelpId = useId();
-  const [endpoint, setEndpoint] = useState(initialConfig?.endpoint ?? '');
+  const [endpoint, setEndpoint] = useState(sameOrigin ? location.origin : (initialConfig?.endpoint ?? ''));
   const [accessKey, setAccessKey] = useState(initialConfig?.accessKey ?? '');
   const [secretKey, setSecretKey] = useState(initialConfig?.secretKey ?? '');
   // Reflects reality by default: pre-filled fields mean a connection is
@@ -259,7 +263,7 @@ export function Connection({
         </div>
 
         <div className="space-y-4">
-          <div>
+          {!sameOrigin && <div>
             <label htmlFor="endpoint" className={fieldLabel}>
               Endpoint
             </label>
@@ -275,7 +279,7 @@ export function Connection({
               spellCheck={false}
               disabled={pending}
             />
-          </div>
+          </div>}
           <div>
             <label htmlFor="accessKey" className={fieldLabel}>
               Access key
@@ -322,14 +326,14 @@ export function Connection({
           </p>
         </div>
 
-        <button
+        {!sameOrigin && <button
           type="button"
           className="mt-5 text-[14px] font-body text-inkSoft hover:text-ink underline underline-offset-4 decoration-rule"
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen((v) => !v)}
         >
           {advancedOpen ? '− Advanced' : '+ Advanced'}
-        </button>
+        </button>}
 
         {advancedOpen && (
           <div className="mt-4 space-y-4 border-t border-ruleSoft pt-4">
