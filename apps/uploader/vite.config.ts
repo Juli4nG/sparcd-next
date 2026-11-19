@@ -8,7 +8,6 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: { include: ['exifr'] },
   server: {
-    port: 5320,
     proxy: { '/-': gate, '/sparcd-next-': gate },
   },
 });

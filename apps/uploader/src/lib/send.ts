@@ -136,12 +136,18 @@ export async function sendCard(job: Job): Promise<Outcome> {
 
 async function putPhoto(session: Session, photo: Photo, missing: string[], pool: ReturnType<typeof createPool>) {
   const keys = keysOf(photo);
-  const derived = missing.includes('thumb') || missing.includes('view') ? await pool.derive(photo.file) : undefined;
-  const puts: Promise<unknown>[] = [];
   const put = (key: string, body: Blob | Uint8Array<ArrayBuffer>, sha256: string) =>
-    puts.push(session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256, ifNoneMatch: true }));
-  if (missing.includes('original')) put(keys.original, photo.file, photo.mediaID);
-  if (derived && missing.includes('thumb')) put(keys.thumb, new Uint8Array(derived.thumb), derived.thumbSha256);
-  if (derived && missing.includes('view')) put(keys.view, new Uint8Array(derived.view), derived.viewSha256);
+    session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256, ifNoneMatch: true });
+  const puts: Promise<unknown>[] = [];
+  if (missing.includes('original')) puts.push(put(keys.original, photo.file, photo.mediaID));
+  if (missing.includes('thumb') || missing.includes('view'))
+    puts.push(
+      pool.derive(photo.file).then((d) =>
+        Promise.all([
+          missing.includes('thumb') && put(keys.thumb, new Uint8Array(d.thumb), d.thumbSha256),
+          missing.includes('view') && put(keys.view, new Uint8Array(d.view), d.viewSha256),
+        ]),
+      ),
+    );
   await Promise.all(puts);
 }
