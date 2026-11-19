@@ -61,10 +61,12 @@ export function useTagging(session: Session, about: About, card: Card) {
       }
       writeDraft(key, draft.current);
       tagsRef.current = next;
+      // The other tagging screen opened on this card starts from these, not the ones it loaded with.
+      card.tags = next;
       setTags(next);
       saver.mark(changed);
     },
-    [saver, key],
+    [saver, key, card],
   );
 
   /** Returns every photo's tags after the change. */

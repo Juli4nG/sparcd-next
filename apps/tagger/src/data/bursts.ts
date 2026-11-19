@@ -1,5 +1,6 @@
-import { instant, type Media } from '@sparcd/bucket';
+import { burstEventId, instant, type Media } from '@sparcd/bucket';
 
+/** Photos taken within this long of their neighbour belong to one burst. */
 export const BURST_GAP_MS = 60_000;
 
 /**
@@ -14,4 +15,18 @@ export function groupBursts(photos: Pick<Media, 'timestamp'>[], gapMs = BURST_GA
     else bursts.push([i]);
   });
   return bursts;
+}
+
+/** Photos `start` to `end` (inclusive) of a card, and the eventID their rows share when tagged together. */
+export type Burst = { start: number; end: number; eventID: string };
+
+/** Each photo's burst, for photos sorted by time; null for a photo taken on its own. */
+export function burstsOf(photos: Media[]): (Burst | null)[] {
+  const out: (Burst | null)[] = photos.map(() => null);
+  for (const run of groupBursts(photos)) {
+    if (run.length < 2) continue;
+    const [start, end] = [run[0], run[run.length - 1]];
+    out.fill({ start, end, eventID: burstEventId(photos[start].deploymentID, photos[start].mediaID) }, start, end + 1);
+  }
+  return out;
 }

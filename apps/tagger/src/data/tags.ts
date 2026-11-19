@@ -6,7 +6,7 @@ import type { Observation, ObservationType, Species, Tag } from '@sparcd/bucket'
  * "Nothing in this photo" (blank) and Unknown round-trip through rows that
  * carry no scientificName.
  */
-export type PhotoTag = { key: string; observationType: ObservationType; scientificName: string; count: number };
+export type PhotoTag = { key: string; observationType: ObservationType; scientificName: string; count: number; eventID?: string };
 
 const named = (type: ObservationType) => type === 'animal' || type === 'human';
 
@@ -38,7 +38,8 @@ export function tagsFromRows(observations: Observation[]): Map<string, PhotoTag[
         .map((o) => {
           const type = o.observationType as ObservationType;
           const scientificName = named(type) ? (o.scientificName ?? '') : '';
-          return { key: tagKey(type, scientificName), observationType: type, scientificName, count: Number(o.count) || 1 };
+          const tag: PhotoTag = { key: tagKey(type, scientificName), observationType: type, scientificName, count: Number(o.count) || 1 };
+          return o.eventID ? { ...tag, eventID: o.eventID } : tag;
         }),
     );
   }
@@ -57,7 +58,8 @@ export const toBucketTags = (tags: PhotoTag[]): Tag[] =>
 
 /** Add-only: a species already on the photo is left as it is. Nothing is exclusive; any species clears it. */
 export function addTag(tags: PhotoTag[], tag: PhotoTag): PhotoTag[] {
-  if (tag.observationType === 'blank') return tags.length === 1 && tags[0].key === tag.key ? tags : [{ ...NOTHING }];
+  if (tag.observationType === 'blank')
+    return tags.length === 1 && tags[0].key === tag.key ? tags : [tag.eventID ? { ...NOTHING, eventID: tag.eventID } : { ...NOTHING }];
   const real = tags.filter((t) => t.observationType !== 'blank');
   return real.some((t) => t.key === tag.key) ? (real.length === tags.length ? tags : real) : [...real, tag];
 }
@@ -81,4 +83,4 @@ export function tagState(tags: PhotoTag[] | undefined): TagState {
 }
 
 export const sameTags = (a: PhotoTag[] = [], b: PhotoTag[] = []): boolean =>
-  a.length === b.length && a.every((t, i) => t.key === b[i].key && t.count === b[i].count);
+  a.length === b.length && a.every((t, i) => t.key === b[i].key && t.count === b[i].count && t.eventID === b[i].eventID);

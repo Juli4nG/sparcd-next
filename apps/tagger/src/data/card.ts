@@ -121,7 +121,12 @@ export async function saveTags(
   editedAt: (id: string) => string,
 ): Promise<void> {
   const media = new Map(card.photos.map((m) => [m.mediaID, m]));
-  const rows = ids.flatMap((id) => tagRows(media.get(id)!, toBucketTags(tagsOf(id)), session.code, { timestamp: editedAt(id), eventID: card.events.get(id) }));
+  const rows = ids.flatMap((id) => {
+    const tags = tagsOf(id);
+    // A tag applied to a whole burst carries its own eventID; otherwise the photo keeps the one its stored rows shared (FORMAT.md).
+    return tagRows(media.get(id)!, toBucketTags(tags), session.code, { timestamp: editedAt(id), eventID: card.events.get(id) })
+      .map((row, i) => (tags[i].eventID ? { ...row, eventID: tags[i].eventID } : row));
+  });
   const copies = ids.map((id) => media.get(id)!).filter((m) => !isOwnRow(m) && tagsOf(m.mediaID).length);
   const rowChanges: Changes = {
     ...(copies.length && { deployments: (d: Deployment[]) => mergeDeployments(d, [card.deployment], 'insert') }),

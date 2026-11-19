@@ -378,6 +378,12 @@ export function Tag({ session, about, species, card, title }: { session: Session
         </a>
         <h1 className="min-w-0 truncate font-display text-[22px] font-[600] text-ink">{title}</h1>
         <div className="ml-auto shrink-0 flex items-center gap-3">
+          <a
+            href={`${location.hash}&simple`}
+            className="min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            Try the simpler screen
+          </a>
           {tools}
           <button
             onClick={() => setCheatsheet(true)}
