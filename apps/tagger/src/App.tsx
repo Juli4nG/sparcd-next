@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { loadConfig, restoreSession, signOut, type About, type Config, type Session, type Species } from '@sparcd/bucket';
 import { CardList } from './CardList';
 import { loadCard, loadSettings, type Card } from './data/card';
+import { shareFromHash } from './data/share';
 import { cardTitle } from './dates';
+import { SharePage } from './share/SharePage';
 import { SignIn } from './SignIn';
 import { SimpleTag } from './simple/Simple';
 import { Tag } from './tag/Tag';
@@ -19,6 +21,7 @@ export function App() {
   const [start, setStart] = useState<Start | null>(null);
   const [cardId, setCardId] = useState(cardFromHash);
   const [simple, setSimple] = useState(simpleFromHash);
+  const [shareUrl, setShareUrl] = useState(shareFromHash);
 
   useEffect(() => {
     loadConfig()
@@ -27,6 +30,7 @@ export function App() {
     const onHash = () => {
       setCardId(cardFromHash());
       setSimple(simpleFromHash());
+      setShareUrl(shareFromHash());
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -54,7 +58,7 @@ export function App() {
           Sign out
         </button>
       </header>
-      <div className="flex-1 min-h-0">{cardId ? <CardPage key={cardId} session={session} cardId={cardId} simple={simple} /> : <CardList session={session} />}</div>
+      <div className="flex-1 min-h-0">{shareUrl !== null ? <SharePage key={shareUrl} session={session} url={shareUrl} endpoint={config.endpoint} simple={simple} /> : cardId ? <CardPage key={cardId} session={session} cardId={cardId} simple={simple} /> : <CardList session={session} />}</div>
     </div>
   );
 }
@@ -80,7 +84,7 @@ function CardPage({ session, cardId, simple }: { session: Session; cardId: strin
   return <Screen session={session} about={state.about} species={state.species} card={state.card} title={cardTitle(state.card.deployment)} />;
 }
 
-function Message({ children, warn }: { children: React.ReactNode; warn?: boolean }) {
+export function Message({ children, warn }: { children: React.ReactNode; warn?: boolean }) {
   return (
     <div className="h-full grid place-items-center p-8">
       <p role={warn ? 'alert' : 'status'} className={`text-[19px] max-w-[36rem] text-center ${warn ? 'text-warn' : 'text-inkMute'}`}>

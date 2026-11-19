@@ -1,9 +1,11 @@
-// End-to-end check against a running dev server and a seeded no-gate MinIO:
-// sign in, open the card, tag 23 photos by keyboard and mouse, wait for
-// "Saved", reload, compare, and download the package for frictionless.
+// End-to-end check: sign in, open the card, tag 23 photos by keyboard and
+// mouse, wait for "Saved", reload, compare, and download the package for
+// frictionless.
 //
 //   node scripts/verify.mjs <shots folder> <package folder>
 // Reads SEED_ENDPOINT, SEED_LOGIN, SEED_PASSWORD; APP defaults to http://localhost:5190/tag/.
+// With UPLOAD_CARD=<card folder> it starts in the Uploader on the same origin
+// instead, sends the card, and follows "Tag these photos" into the Tagger.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
@@ -11,7 +13,7 @@ import { AwsClient } from 'aws4fetch';
 
 const [shots, packageDir] = process.argv.slice(2);
 const app = process.env.APP ?? 'http://localhost:5190/tag/';
-const { SEED_ENDPOINT: endpoint, SEED_LOGIN: login, SEED_PASSWORD: password } = process.env;
+const { SEED_ENDPOINT: endpoint, SEED_LOGIN: login, SEED_PASSWORD: password, UPLOAD_CARD: card } = process.env;
 const bucket = `sparcd-next-${login}`;
 await mkdir(shots, { recursive: true });
 await mkdir(packageDir, { recursive: true });
@@ -29,21 +31,45 @@ const tap = async (modifier) => {
   await page.keyboard.up(modifier);
 };
 
-await page.goto(app);
-await page.getByLabel('Login name').waitFor();
-await shot('01-sign-in');
-await page.getByLabel('Login name').fill(login);
-await page.getByLabel('Password').fill('not-the-password');
-await page.getByRole('button', { name: 'Sign in' }).click();
-await page.getByText("That login name or password didn't work").waitFor();
-await shot('02-sign-in-wrong-password');
-await page.getByLabel('Password').fill(password);
-await page.getByRole('button', { name: 'Sign in' }).click();
-await page.getByTestId('card-row').first().waitFor();
-await shot('03-cards');
-step(`cards: ${await page.getByTestId('card-row').first().innerText()}`.replace(/\n/g, ' | '));
+async function signInToTagger() {
+  await page.goto(app);
+  await page.getByLabel('Login name').waitFor();
+  await shot('01-sign-in');
+  await page.getByLabel('Login name').fill(login);
+  await page.getByLabel('Password').fill('not-the-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByText("That login name or password didn't work").waitFor();
+  await shot('02-sign-in-wrong-password');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByTestId('card-row').first().waitFor();
+  await shot('03-cards');
+  step(`cards: ${await page.getByTestId('card-row').first().innerText()}`.replace(/\n/g, ' | '));
+  await page.getByRole('link', { name: 'Tag these photos' }).first().click();
+}
 
-await page.getByRole('link', { name: 'Tag these photos' }).first().click();
+async function sendWithUploader() {
+  await page.goto(new URL('/upload/', app).href);
+  await page.getByLabel('Login name').fill(login);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Juniper Draw' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.locator('input[type=file]').setInputFiles(card);
+  await page.getByText(/200 photos found/).waitFor({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Send photos' }).click();
+  await page.getByRole('heading', { name: /photos are saved/ }).waitFor({ timeout: 200_000 });
+  await shot('00-uploader-done');
+  step('the Uploader sent the card');
+  await page.getByRole('button', { name: 'Tag these photos' }).click();
+  await page.waitForURL(/\/tag\/#card=/);
+  if (await page.getByLabel('Login name').count()) throw new Error('the Tagger asked to sign in again');
+  step(`"Tag these photos" opened ${new URL(page.url()).hash} without asking to sign in`);
+}
+
+if (card) await sendWithUploader();
+else await signInToTagger();
 await tile(0).waitFor();
 await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="photo-tile"] img')].filter((i) => i.complete && i.naturalWidth).length >= 8);
 await shot('04-grid');
@@ -138,13 +164,26 @@ step(`after reload the same 23 tags are there (${await page.getByRole('button', 
 await shot('11-after-reload');
 
 await page.goto(app);
+if (card) {
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByLabel('Login name').fill(login);
+  await page.getByLabel('Password').fill('not-the-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByText("That login name or password didn't work").waitFor();
+  await shot('02-sign-in-wrong-password');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  step('signed out, a wrong password was refused, the right one let me back in');
+}
 await page.getByTestId('card-row').first().waitFor();
 await shot('12-cards-after');
 step(`cards: ${await page.getByTestId('card-row').first().innerText()}`.replace(/\n/g, ' | '));
 
 const aws = new AwsClient({ accessKeyId: login, secretAccessKey: password, service: 's3', region: 'us-east-1' });
+const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 for (const file of ['datapackage.json', 'deployments.csv', 'media.csv', 'observations.csv']) {
-  const res = await aws.fetch(`${endpoint}/${bucket}/${file}`);
+  const res = await aws.fetch(`${endpoint}/${bucket}/${file}`, { headers: { 'x-amz-content-sha256': EMPTY_SHA256 } });
+  if (!res.ok) throw new Error(`${file}: ${res.status}`);
   await writeFile(join(packageDir, file), await res.text());
 }
 step(`package files downloaded to ${packageDir}`);

@@ -156,7 +156,6 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
   }, []);
 
   const applied = new Set(currentTags.map((t) => t.key));
-  const usual = `#card=${encodeURIComponent(card.deployment.deploymentID)}`;
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -167,7 +166,7 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
         <h1 className="min-w-0 truncate font-display text-[24px] font-[600] text-ink">{title}</h1>
         <Progress done={tagged} total={photos.length} />
         <SaveIndicator status={tagging.status} />
-        <a href={usual} className={`shrink-0 min-h-11 inline-flex items-center text-[18px] text-inkSoft underline underline-offset-4 hover:text-ink ${focusRing}`}>
+        <a href={location.hash.replace(/&simple(?=&|$)/, '')} className={`shrink-0 min-h-11 inline-flex items-center text-[18px] text-inkSoft underline underline-offset-4 hover:text-ink ${focusRing}`}>
           Back to the usual screen
         </a>
       </div>

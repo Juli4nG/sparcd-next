@@ -1,70 +1,74 @@
-# sparcd-exploration — context for Claude Code
+# sparcd-next: context for Claude Code
 
 ## What this project is
 
-A workspace for small, single-purpose, mostly-static tools that work
-**alongside** [SPARC'd](https://github.com/CulverLab/sparcd-web). SPARC'd is
-the system of record; the apps here read from it and add focused views on
-top.
+SPARC'd Next takes camera-trap photos from SD card to tagged data. A volunteer
+signs in, sends a card's photos to their own storage with the **Uploader**, and
+tags them with the **Tagger**. Each person's storage is one valid Camtrap DP
+1.0 package at all times. The **gate** gives each person their own login in
+front of storage that has one key for a whole project. The **Explorer** is a
+marimo notebook that reads Camtrap DP CSVs and shows a map and species
+dashboard.
 
-## Framing
+## Layout
 
-Use language like *alongside*, *complement*, *focused tool*, *static tool*,
-*exploration*. Describe what each tool **is** and **does**, not what it
-relates to in other systems.
+- `apps/uploader` (`/upload/`), `apps/tagger` (`/tag/`): Vite + React + TypeScript.
+- `apps/gate`: a plain Node (24) SigV4 access proxy with a CLI, a local recipe
+  (`local/`) and a server recipe (`deploy/`).
+- `apps/sparcd-home`: static landing page at `/` with a button per app.
+- `apps/sparcd-explorer`: marimo notebook, Python via uv.
+- `packages/bucket` (`@sparcd/bucket`): sign-in, S3 client, package
+  read/write, settings. The Uploader and Tagger are built on it.
+- `packages/camtrap` (`@sparcd/camtrap`): the Camtrap DP data contract.
+- `docs/next/`: the contracts. `FORMAT.md` is the bucket layout, `GATE.md` is
+  the gate's rules and endpoints. Other files in `docs/` are history.
 
-## How tools are organized
+## Storage model
 
-- Each `apps/<name>/` is **one tool that does one thing well**. When a new
-  need appears, add a new app — keep each one tight.
-- Prefer designs that can ship as a **static bundle** (Pyodide / WASM in the
-  browser, prebuilt data files, signed S3 URLs) — no server-side state.
-- Per-feature optimization beats shared abstractions. It's fine for two apps
-  to duplicate small pieces of logic if it lets each one stay tight.
+- One bucket per person, `sparcd-next-<person code>`, holding one Camtrap DP
+  package plus `Media/<sha256>/` files. Lab settings are in
+  `sparcd-next-settings`.
+- Apps learn bucket names from the gate's `/-/whoami`, or from `config.json`
+  when there is no gate. They never hard-code them.
+- The login name is the person code; the password is the SigV4 secret. The
+  gate verifies each request, applies the access table, and signs again with
+  the project key. Photos are write-once (`If-None-Match: *`) and nothing is
+  deleted through the gate.
+
+## Run and deploy
+
+- Local: `node apps/gate/local/up.mjs` starts MinIO, the gate and Caddy on
+  `http://localhost:8080`; `node apps/gate/local/down.mjs` stops them.
+- Deploy: `apps/gate/deploy/` (Ubuntu VM, Caddy, systemd). Use
+  `server.example.org` for example hosts in docs.
 
 ## Toolchain
 
-- **pnpm 10** + **Turborepo 2** at the root — JS workspaces and task pipeline
-- **uv** for any Python app's environment (each app owns its `pyproject.toml`
-  + `.venv` under `apps/<name>/`)
-- **marimo** for notebook-style exploration apps; pair with the
-  [`marimo-pair`](https://github.com/marimo-team/marimo-pair) Claude Code
-  plugin for live-kernel collaboration. Notebooks open with
-  `--watch --no-token` so the plugin auto-discovers.
+- **pnpm 10** + **Turborepo 2** at the root; Node 24.
+- **uv** for the Explorer's Python environment (`apps/sparcd-explorer`).
+- Tests: vitest in the packages and the two apps, `node --test` in the gate
+  and home. CI is `.github/workflows/next-test.yml`.
 
-## Working with the SPARC'd backend
+## Storage access scope
 
-- Data lives in **MinIO/S3** (`wildcats.sparcd.arizona.edu`) and a small
-  SQLite app-state DB. Object layout is **Camtrap-DP-flavored** CSVs per
-  upload: `deployments.csv`, `media.csv`, `observations.csv`, plus image
-  files and a `UploadMeta.json`.
-- Treat the backend as **read-only**. All operations should be
-  `list_buckets`, `list_objects`, `get_object`, `stat_object`, or
-  `presigned_get_object` (URL signing).
-- Credentials live in `apps/<name>/.env` (gitignored). The endpoint can be a
-  bare host or a full URL — the loader normalizes either.
+The system's storage is the `sparcd-next-*` buckets in the Jetstream2 project
+used for this work. Touch only those; the gate's `BUCKET_ALLOW` enforces the
+same prefix. Other buckets in the project are out of scope. Credentials live in
+gitignored env files under `~/.secrets/` and never go in the repo, a prompt, or
+a commit.
 
-### Access scope
+## Working rules
 
-Authorized scope is the **Educational Test collection**
-(`sparcd-8dbd9c43-5c3d-411d-8778-617d4693c69b`). Stay within that bucket
-unless the user explicitly authorizes a wider read for a specific task —
-don't grep, list, or fetch outside it on a hunch.
-
-## Style preferences
-
-- Tight, direct prose. No filler, no trailing summaries when a diff speaks
-  for itself.
-- For notebooks: each cell should do one thing. Use `mo.md(...)` for
-  human-facing context, raw expressions for data displays.
-- Don't add fallbacks, validation, or compatibility shims for cases that
-  can't happen in practice. Trust data shapes we've already verified.
-- Don't write code comments that just restate the code. Reserve comments
-  for non-obvious *why*.
-
-## Pointers
-
-- `README.md` — quick start and layout
-- `apps/sparcd-explorer/README.md` — the first focused tool (map +
-  thumbnails + tags for the Educational Test collection)
-- Upstream code: <https://github.com/CulverLab/sparcd-web>
+- Each app does one thing well. When a new need appears, add an app rather
+  than growing one.
+- Prefer designs that ship as a static bundle with no server-side state; the
+  gate is the one server piece.
+- Per-feature optimization beats shared abstractions. Two apps may duplicate
+  small logic to stay tight.
+- Don't add fallbacks, validation or compatibility shims for cases that can't
+  happen. Trust data shapes the contracts in `docs/next/` already fix.
+- Tight, direct prose. No filler, no trailing summaries when a diff speaks for
+  itself.
+- Comments explain a non-obvious *why*, not what the code says.
+- Commit golden fixtures with their line endings intact (`.gitattributes`
+  keeps them as committed).

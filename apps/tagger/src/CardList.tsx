@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
-import { readPackage, type Session } from '@sparcd/bucket';
-import { cardSummaries, type CardSummary } from './data/card';
+import { createShare, readPackage, type Deployment, type Session } from '@sparcd/bucket';
+import { cardSummaries, loadSettings, type CardSummary } from './data/card';
+import { shareLink, sharedSummaries, type SharedSummary } from './data/share';
 import { cardTitle } from './dates';
+import { ShareDialog } from './share/ShareDialog';
+import { SharedList } from './share/SharedList';
 
 export function CardList({ session }: { session: Session }) {
   const [cards, setCards] = useState<CardSummary[] | null>(null);
+  const [shared, setShared] = useState<SharedSummary[]>([]);
+  const [sharing, setSharing] = useState<{ deployment: Deployment; result: Promise<string | null> } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    readPackage(session.bucket).then((rows) => setCards(cardSummaries(rows)), () => setFailed(true));
+    readPackage(session.bucket).then(
+      (rows) => {
+        setCards(cardSummaries(rows));
+        setShared(sharedSummaries(rows));
+      },
+      () => setFailed(true),
+    );
   }, [session]);
 
   return (
@@ -35,6 +46,17 @@ export function CardList({ session }: { session: Session }) {
                     <div className="h-full bg-ok" style={{ width: `${c.photos ? (c.tagged / c.photos) * 100 : 0}%` }} />
                   </div>
                 </div>
+                <button
+                  onClick={() => {
+                    const result = loadSettings(session)
+                      .then(({ about }) => createShare(session.bucket, c.deployment.deploymentID, about))
+                      .then(shareLink, () => null);
+                    setSharing({ deployment: c.deployment, result });
+                  }}
+                  className="min-h-14 px-5 border border-ink text-ink text-[18px] font-[600] hover:bg-paperHover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+                >
+                  Share for tagging
+                </button>
                 <a
                   href={`#card=${encodeURIComponent(c.deployment.deploymentID)}`}
                   className="min-h-14 px-6 inline-flex items-center bg-ink text-paper text-[18px] font-[600] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
@@ -45,7 +67,9 @@ export function CardList({ session }: { session: Session }) {
             ))}
           </ul>
         )}
+        {shared.length > 0 && <SharedList cards={shared} />}
       </div>
+      {sharing && <ShareDialog {...sharing} onClose={() => setSharing(null)} />}
     </main>
   );
 }
