@@ -66,11 +66,16 @@ class Connection {
 
   constructor(
     readonly endpoint: string,
-    region: string,
-    login: string,
-    password: string,
+    private readonly region: string,
+    private readonly login: string,
+    private readonly password: string,
   ) {
     this.aws = new AwsClient({ accessKeyId: login, secretAccessKey: password, service: 's3', region, retries: 0 });
+  }
+
+  /** The same sign-in at another host and port; each request is signed for the host it goes to. */
+  at(endpoint: string): Connection {
+    return new Connection(endpoint, this.region, this.login, this.password);
   }
 
   url(path: string, query: Record<string, string> = {}): string {
@@ -107,6 +112,30 @@ export class Bucket {
     private readonly connection: Connection,
     readonly name: string,
   ) {}
+
+  /** This bucket reached through another endpoint, e.g. an upload shard on another port. */
+  at(endpoint: string): Bucket {
+    return new Bucket(this.connection.at(endpoint), this.name);
+  }
+
+  get endpoint(): string {
+    return this.connection.endpoint;
+  }
+
+  /** One signed request, no retries: does this endpoint answer for this sign-in? */
+  async reachable(timeoutMs: number): Promise<boolean> {
+    try {
+      const request = await this.connection.aws.sign(this.connection.url('/-/whoami'), {
+        headers: { 'x-amz-content-sha256': await sha256Hex(new Uint8Array()) },
+        aws: { allHeaders: true },
+      });
+      const res = await fetch(request, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) });
+      await res.body?.cancel();
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
 
   private path(key?: string): string {
     return `/${encode(this.name)}${key ? `/${key.split('/').map(encode).join('/')}` : ''}`;
