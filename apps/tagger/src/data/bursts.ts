@@ -1,4 +1,5 @@
 import { burstEventId, instant, type Media } from '@sparcd/bucket';
+import type { PhotoTag } from './tags';
 
 /** Photos taken within this long of their neighbour belong to one burst. */
 export const BURST_GAP_MS = 60_000;
@@ -30,3 +31,7 @@ export function burstsOf(photos: Media[]): (Burst | null)[] {
   }
   return out;
 }
+
+/** A whole burst is tagged at once only while none of its photos has a tag. */
+export const untaggedBurst = (burst: Burst, photos: Media[], tags: Map<string, PhotoTag[]>): boolean =>
+  photos.slice(burst.start, burst.end + 1).every((p) => !tags.get(p.mediaID)?.length);

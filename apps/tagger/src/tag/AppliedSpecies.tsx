@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-
-const MAX_COUNT = 999;
 import type { PhotoTag } from '../data/tags';
+
+export const MAX_COUNT = 999;
 
 export const NOTHING_LABEL = 'Nothing in this photo';
 

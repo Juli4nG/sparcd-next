@@ -20,9 +20,10 @@ export async function saveEverything(): Promise<boolean> {
 }
 
 /**
- * A card's tags in memory, with undo and autosave. Every screen that tags a
- * card goes through this: `edit` changes some photos, and the saver writes
- * them to the package shortly after. Unsaved edits also wait in a browser
+ * A card's tags in memory, with undo and autosave. The page that opens a card
+ * calls this once and hands it to whichever screen shows the card, so
+ * switching screens keeps edits and Undo. `edit` changes some photos, and the
+ * saver writes them to the package shortly after. Unsaved edits also wait in a browser
  * draft, so closing the page loses nothing; reopening the card saves them.
  */
 export function useTagging(session: Session, about: About, card: Card) {
@@ -61,12 +62,10 @@ export function useTagging(session: Session, about: About, card: Card) {
       }
       writeDraft(key, draft.current);
       tagsRef.current = next;
-      // The other tagging screen opened on this card starts from these, not the ones it loaded with.
-      card.tags = next;
       setTags(next);
       saver.mark(changed);
     },
-    [saver, key, card],
+    [saver, key],
   );
 
   /** Returns every photo's tags after the change. */
