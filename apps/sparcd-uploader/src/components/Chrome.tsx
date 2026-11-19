@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { BrandSwitcher, ConnectionChip } from '@sparcd/auth-ui';
+import { BrandSwitcher, ConnectionChip, OfflineBanner } from '@sparcd/auth-ui';
 import { useStore, type Section } from '../store';
 import { StatePill, type UploadState } from './StatePill';
 import { ConfirmNavigateAwayDialog } from './ConfirmNavigateAwayDialog';
@@ -80,7 +80,7 @@ export function Chrome({ uploadState, children }: { uploadState: UploadState; ch
         </nav>
 
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <StatePill state={uploadState} />
+          {SHOW_OLD_STORAGE_FEATURES && <StatePill state={uploadState} />}
           {s3Config && (
             <ConnectionChip identity={headerIdentity} onDisconnect={handleDisconnect} />
           )}
@@ -95,6 +95,9 @@ export function Chrome({ uploadState, children }: { uploadState: UploadState; ch
         </div>
       </header>
 
+      <div className="px-6 pt-3 empty:hidden">
+        <OfflineBanner message="No internet. Sending will carry on when it's back." />
+      </div>
       <main className="flex-1 min-h-0">{children}</main>
 
       {confirmDisconnect && (

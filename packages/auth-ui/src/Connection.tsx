@@ -125,7 +125,9 @@ export function Connection({
       case 'unreachable':
         return `Couldn't reach ${endpoint.trim() || 'the endpoint'}. Check the address, then try again.`;
       case 'credentials-rejected':
-        return 'The server rejected this access key and secret key. Check them and try again.';
+        return sameOrigin
+          ? 'That login name and password didn’t work. Check them and try again.'
+          : 'The server rejected this access key and secret key. Check them and try again.';
       case 'probe-denied':
         return (
           "Unable to confirm your credentials. The server denied this check, which needs " +
@@ -236,12 +238,12 @@ export function Connection({
         <div className="-ml-1.5 mb-1">
           <BrandSwitcher toolName={toolName} />
         </div>
-        <p className="font-body text-[14px] text-inkSoft mb-6">
+        {sameOrigin ? <div className="mb-6" /> : <p className="font-body text-[14px] text-inkSoft mb-6">
           Connect to an S3-compatible endpoint to begin.
-        </p>
+        </p>}
 
         <div className="mb-4 space-y-2">
-          <OfflineBanner message="You're offline — connecting needs a network connection." />
+          <OfflineBanner message={sameOrigin ? "No internet. You can sign in when it's back." : "You're offline — connecting needs a network connection."} />
           {showMixedContentWarning && (
             <div
               role="status"
@@ -283,7 +285,7 @@ export function Connection({
           </div>}
           <div>
             <label htmlFor="accessKey" className={fieldLabel}>
-              Access key
+              {sameOrigin ? 'Login name' : 'Access key'}
             </label>
             <input
               id="accessKey"
@@ -298,7 +300,7 @@ export function Connection({
           </div>
           <div>
             <label htmlFor="secretKey" className={fieldLabel}>
-              Secret key
+              {sameOrigin ? 'Password' : 'Secret key'}
             </label>
             <input
               id="secretKey"
@@ -311,7 +313,8 @@ export function Connection({
               disabled={pending}
             />
           </div>
-          <label className="flex items-center gap-2.5 font-body text-[14px] text-ink">
+          {/* Behind the gate the sign-in lasts for the browser session; there's nothing to remember. */}
+          {!sameOrigin && <><label className="flex items-center gap-2.5 font-body text-[14px] text-ink">
             <input
               type="checkbox"
               className="w-4 h-4 accent-accent"
@@ -324,7 +327,7 @@ export function Connection({
           </label>
           <p id={rememberHelpId} className="font-body text-[13px] text-inkMute italic">
             (Don't set remember endpoint &amp; access key if on a public computer)
-          </p>
+          </p></>}
         </div>
 
         {!sameOrigin && <button

@@ -34,9 +34,14 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-function fmtDuration(ms: number) {
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+/** Rounded so it reads like a person would say it: "About 20 minutes left". */
+function timeLeft(ms: number) {
+  const min = ms / 60_000;
+  if (min < 1.5) return 'About a minute left';
+  if (min < 10) return `About ${Math.round(min)} minutes left`;
+  if (min < 90) return `About ${Math.round(min / 5) * 5} minutes left`;
+  const h = Math.round(min / 30) / 2;
+  return `About ${h} hour${h === 1 ? '' : 's'} left`;
 }
 
 export function NextUpload() {
@@ -96,13 +101,15 @@ export function NextUpload() {
   const total = progress?.total ?? card.length;
   const done = outcome ? total : (progress?.done ?? 0);
   const pct = total > 0 ? (done / total) * 100 : 0;
-  const phase = outcome ? 'done' : error ? 'error' : progress?.phase === 'sending' ? 'uploading' : running ? 'preparing' : 'idle';
+  const phase = outcome ? 'done' : error ? 'paused' : progress?.phase === 'sending' ? 'uploading' : running ? 'preparing' : 'idle';
+  // Shown only while sending, once enough photos have gone to judge the pace
+  // (an early guess jumped from minutes to hours, #655). The average over the
+  // whole send moves slowly, so the estimate stays steady.
   let eta: string | null = null;
-  if (running && progress) {
-    const base = progress.phase === 'sending' ? progress.sentBefore : 0;
+  if (running && progress?.phase === 'sending') {
+    const sent = progress.done - progress.sentBefore;
     const elapsed = now - progress.startedAt;
-    const rate = (progress.done - base) / elapsed;
-    if (progress.done - base >= 3 && elapsed > 3000) eta = `about ${fmtDuration((progress.total - progress.done) / rate)} left`;
+    if (sent >= 10 && elapsed > 20_000) eta = timeLeft(((progress.total - progress.done) * elapsed) / sent);
   }
   const stored = outcome ? outcome.total - outcome.alreadySaved - outcome.leftOut.length : 0;
 
@@ -121,7 +128,7 @@ export function NextUpload() {
           </div>
           {location && (
             <div className="flex items-baseline gap-3">
-              <dt className="text-inkSoft w-28 shrink-0">Location</dt>
+              <dt className="text-inkSoft w-28 shrink-0">Site ID</dt>
               <dd className="min-w-0">
                 <span className="block break-words text-ink">{location.name}</span>
                 <span className="block break-all font-mono text-[12px] text-inkMute">{location.id}</span>
@@ -152,7 +159,7 @@ export function NextUpload() {
               <span className="font-mono text-ok">{done}</span> of <span className="font-mono">{total}</span>{' '}
               {progress?.phase === 'reading' && running ? 'read' : 'done'}
             </p>
-            {eta && <p className="shrink-0 font-mono text-[12px] text-ink">{eta}</p>}
+            {eta && <p className="shrink-0 font-body text-[13px] text-ink">{eta}</p>}
           </div>
           <div className="h-2 bg-paperHover border border-ruleSoft overflow-hidden">
             <span
@@ -163,9 +170,9 @@ export function NextUpload() {
           {running && <Note message="Keep this page open until the upload is done." />}
           {outcome && (
             <Note
-              message={`Stored ${stored} new photo${stored === 1 ? '' : 's'} in ${outcome.deploymentID}${
-                outcome.alreadySaved ? `; ${outcome.alreadySaved} were already in your storage` : ''
-              }.`}
+              message={`Saved ${stored} new photo${stored === 1 ? '' : 's'}.${
+                outcome.alreadySaved ? ` Already saved: ${outcome.alreadySaved}.` : ''
+              }`}
             />
           )}
           {outcome && outcome.leftOut.length > 0 && (

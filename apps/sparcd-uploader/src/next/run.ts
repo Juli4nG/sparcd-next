@@ -22,10 +22,27 @@ function explain(err: unknown): string {
   if (cause instanceof S3Error && cause.status === 403) return 'Your sign-in has stopped working. Disconnect, sign in again, then retry.';
   if (cause instanceof Error && cause.name === 'NotFoundError')
     return 'The card couldn’t be read. Make sure it’s still plugged in, then retry.';
-  return 'Upload stopped because the connection dropped. Check your internet, then retry.';
+  return DROPPED;
 }
 
-export function startRun(job: { session: Session; lab: Lab; site: Site; date: string; card: CardFile[] }) {
+const DROPPED = "No internet. Sending will carry on when it's back.";
+const RETRY_AFTER_MS = 15_000;
+
+/** After a dropped connection, start again by itself once the browser is back online, or after a short wait. */
+function carryOnLater(job: Job, controller: AbortController) {
+  const again = () => {
+    window.removeEventListener('online', again);
+    clearTimeout(timer);
+    // Cancelled, cleared or started again meanwhile.
+    if (stop === controller) startRun(job);
+  };
+  const timer = setTimeout(() => (navigator.onLine ? again() : undefined), RETRY_AFTER_MS);
+  window.addEventListener('online', again);
+}
+
+type Job = { session: Session; lab: Lab; site: Site; date: string; card: CardFile[] };
+
+export function startRun(job: Job) {
   stop?.abort();
   const controller = new AbortController();
   stop = controller;
@@ -45,7 +62,9 @@ export function startRun(job: { session: Session; lab: Lab; site: Site; date: st
     (err) => {
       if (controller.signal.aborted) return;
       console.error(err);
-      useRun.setState({ running: false, error: explain(err) });
+      const error = explain(err);
+      useRun.setState({ running: false, error });
+      if (error === DROPPED) carryOnLater(job, controller);
     },
   );
 }
@@ -53,7 +72,7 @@ export function startRun(job: { session: Session; lab: Lab; site: Site; date: st
 export function cancelRun() {
   stop?.abort();
   stop = null;
-  useRun.setState({ running: false, error: 'Upload paused. Photos already stored stay stored; retry to finish.' });
+  useRun.setState({ running: false, error: 'Upload paused. Photos already sent stay saved. Press Retry upload to finish.' });
 }
 
 export function clearRun() {

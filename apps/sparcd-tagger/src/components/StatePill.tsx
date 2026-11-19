@@ -6,7 +6,7 @@ import { useFocusExplanation } from './useFocusExplanation';
 // read-only so the live value is `local-only`; the full set is wired now so P4
 // only has to flip the store value.
 const PILLS: Record<SyncState, { label: string; glyph: string }> = {
-  'local-only': { label: 'stored data', glyph: '○' },
+  'local-only': { label: 'saved', glyph: '○' },
   unsynced: { label: 'pending save', glyph: '◔' },
   syncing: { label: 'saving…', glyph: '◐' },
   synced: { label: 'saved', glyph: '●' },

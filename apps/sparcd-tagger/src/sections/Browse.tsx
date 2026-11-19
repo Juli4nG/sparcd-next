@@ -255,7 +255,7 @@ export function Browse() {
                     <div className={`hidden md:grid ${uploadGrid} gap-4 px-4 py-2.5 border-b border-rule text-[11px] font-[600] tracking-[0.14em] uppercase text-inkSoft`}>
                       <span data-column="date">Date</span>
                       <span data-column="upload">Upload</span>
-                      <span data-column="location">Location</span>
+                      <span data-column="location">Site ID</span>
                       <span data-column="tagged-total" className={taggedCell}>Tagged/Total</span>
                       <span data-column="collected" className={taggedCell}>Collected</span>
                       <span data-column="sync" className={syncCell}>Save</span>
@@ -339,7 +339,7 @@ function UploadRow({
         </span>
 
         <span data-column="location" className="min-w-0 font-mono text-[13px] text-inkSoft whitespace-normal break-words">
-          <span className="md:sr-only">Location: </span>
+          <span className="md:sr-only">Site ID: </span>
           {loading
             ? <Skeleton w="w-24" />
             : s?.deployments.length
@@ -403,7 +403,7 @@ function SyncPill({ state }: { state: UploadDraftState | 'local-only' }) {
         <span className="font-mono" aria-hidden>
           ○
         </span>
-        stored data
+        saved
       </span>
     );
   }

@@ -118,7 +118,7 @@ export function DeploymentPicker({ locations, value, onChange, elevationUnit = '
             <span className="block truncate font-mono text-[12px] text-inkMute">{selected.id}</span>
           </span>
         ) : (
-          <span className="font-body text-[14px] text-inkMute">Select a deployment location…</span>
+          <span className="font-body text-[14px] text-inkMute">Select a Site ID…</span>
         )}
         <span aria-hidden className="text-inkSoft text-[12px]">
           ▾
@@ -136,7 +136,7 @@ export function DeploymentPicker({ locations, value, onChange, elevationUnit = '
                 setOpen(true);
               }}
               onKeyDown={onKeyDown}
-              placeholder="Filter by name or id…"
+              placeholder="Filter by name or Site ID…"
               className="min-w-0 flex-1 sm:w-full sm:flex-none border border-rule bg-paper px-2.5 py-1.5 font-body text-[14px] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-1"
               autoComplete="off"
               spellCheck={false}
@@ -155,7 +155,7 @@ export function DeploymentPicker({ locations, value, onChange, elevationUnit = '
           </div>
           <ul role="listbox" className="flex-1 min-h-0 overflow-auto sm:max-h-[280px] sm:flex-none">
             {matches.length === 0 && (
-              <li className="px-3 py-2 font-body text-[13px] text-inkMute">No matching locations.</li>
+              <li className="px-3 py-2 font-body text-[13px] text-inkMute">No matching Site IDs.</li>
             )}
             {matches.map((loc, i) => (
               <li

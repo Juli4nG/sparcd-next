@@ -46,7 +46,7 @@ export function NextAssign() {
   const location = findAllowedLocation(locations, selectedLocationId);
   const ready = !!location && !!dateCollected;
   const continueHint = !location
-    ? 'Select a deployment location first'
+    ? 'Choose a Site ID first'
     : !dateCollected
       ? 'Enter a date collected before continuing'
       : null;
