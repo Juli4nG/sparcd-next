@@ -79,22 +79,27 @@ A request that matches nothing below gets a 403 in S3 XML shape.
 
 | bucket | allowed |
 | --- | --- |
-| the person's own `sparcd-next-<code>` | GetObject, HeadObject, ListObjectsV2, HeadBucket, GetBucketLocation, PutObject, CreateMultipartUpload, UploadPart, CompleteMultipartUpload, AbortMultipartUpload, ListParts |
+| the person's own `sparcd-next-<code>` | GetObject, HeadObject, ListObjectsV2, HeadBucket, GetBucketLocation, PutObject |
 | `sparcd-next-settings` | GetObject, HeadObject, ListObjectsV2, except anything under `access/` |
 | anything else | nothing |
 
+- Clients upload each object with one PUT. Bucket listings require
+  `list-type=2` and HeadBucket requires an empty query.
 - **Write-once photos:**
   - A PutObject under `Media/` must carry `If-None-Match: *`, and is refused
     without it.
   - The client gets the upstream's 412 back when the file already exists.
 - **Refused for everyone:**
   - DeleteObject, so nothing is ever deleted through the gate.
-  - CopyObject, ListBuckets and ListMultipartUploads.
+  - CopyObject and ListBuckets.
   - Bucket create and delete, ACL, policy, versioning and tagging.
-  - Any unknown operation or query parameter.
+  - Unknown operations and unknown or repeated query parameters.
+  - GET or HEAD with a nonzero Content-Length or any Transfer-Encoding.
 - **The namespace guard is a hard wall:**
-  - `BUCKET_ALLOW=sparcd-next-*` with an empty `BUCKET_NAMESPACE`.
-  - A bucket outside that glob is refused before any rule runs.
+  - Every bucket must start with `sparcd-next-` and match `BUCKET_ALLOW`.
+  - The gate and CLI reject a `SETTINGS_BUCKET` that a person could own.
+    The suffix must be invalid as a person code or reserved (`settings`,
+    `gate`, or `admin`).
   - A response naming any other bucket is a 502.
 - **Payload hashing:**
   - UNSIGNED-PAYLOAD is refused on header-signed requests. Clients send the
@@ -109,11 +114,14 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   - Apps presign `<img>` sources with `X-Amz-Date` floored to the hour and a
     7,200 s expiry. That keeps URLs stable, so the browser cache hits within
     the hour.
-- **Caching:**
-  - A GetObject 200 or 206 under `Media/` gets
-    `Cache-Control: private, max-age=604800, immutable`. Those keys are
-    content-addressed and never change.
-  - Everything else gets `Cache-Control: no-store`, as today.
+- Only presigned GetObject 200 or 206 responses under `Media/` get
+  `Cache-Control: private, max-age=7200, immutable`. Other responses use
+  `Cache-Control: no-store`.
+- Responses use `X-Content-Type-Options: nosniff`. GetObject and HeadObject
+  responses carrying upstream object data or metadata also use
+  `Content-Security-Policy: sandbox; default-src 'none'`.
+- Upstream errors use S3 XML with a gate message. Upstream fetches have a
+  60-second deadline and return 504 if it expires before the response starts.
 - A paused person gets 403 on everything.
 
 ## People and buckets

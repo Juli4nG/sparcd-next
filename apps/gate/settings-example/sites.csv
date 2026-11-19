@@ -1,0 +1,6 @@
+locationID,locationName,latitude,longitude,deploymentGroups
+juniper-draw,Juniper Draw,31.85,-110.60,area:East Range
+coyote-bench,Coyote Bench,31.90,-110.55,area:East Range
+mesquite-tank,Mesquite Tank,31.80,-110.65,area:South Flats
+owl-canyon,Owl Canyon,31.95,-110.70,area:North Slope | habitat:riparian
+cholla-flat,Cholla Flat,31.75,-110.60,

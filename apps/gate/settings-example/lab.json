@@ -1,0 +1,8 @@
+{
+  "title": "Example Wildlife Lab",
+  "timeZone": "America/Phoenix",
+  "shareLicenses": [
+    { "name": "CC-BY-NC-4.0", "path": "https://creativecommons.org/licenses/by-nc/4.0/", "scope": "data" },
+    { "name": "CC-BY-NC-4.0", "path": "https://creativecommons.org/licenses/by-nc/4.0/", "scope": "media" }
+  ]
+}
