@@ -22,6 +22,11 @@ const SETTINGS_FILES = {
   'species.json': 'application/json',
 };
 
+// Headers an object keeps when encrypt-stored rewrites it.
+const KEEP_ON_REWRITE = new Set([
+  'content-type', 'content-disposition', 'content-language', 'cache-control', 'expires',
+]);
+
 const USAGE = `usage: node cli.mjs <command>
   init                       create the settings bucket if missing
   add <code> --name "Ana"    create sparcd-next-<code> and the person; prints the password once
@@ -112,9 +117,9 @@ export function openAdmin(env = process.env) {
 
     /**
      * Encrypts every object stored before DATA_KEY was set, in the settings
-     * bucket and each person's bucket, in place. Safe while the gate runs: a
-     * file changed since it was read is left alone, because the gate already
-     * stored that change encrypted. Run it again until it reports nothing left.
+     * bucket and each person's bucket, in place, keeping its headers. Stop the
+     * gate while it runs: If-Match leaves alone a file whose bytes changed, but
+     * not a rewrite of identical bytes with new headers. Safe to repeat.
      */
     async encryptStored(say) {
       if (!dataKey) throw new Error('DATA_KEY is "none": there is no key to encrypt with');
@@ -128,20 +133,31 @@ export function openAdmin(env = process.env) {
           while (next < keys.length) {
             const { key } = keys[next++];
             const head = await raw.send(raw.url(bucket, key), { method: 'HEAD' });
-            // RGW refuses a keyless HEAD of an object stored with a customer key.
-            if (head.status === 400) { count.already += 1; continue; }
             if (head.status === 404) continue;
+            // RGW refuses a keyless HEAD of an object stored with a customer
+            // key; this key must then read it.
+            if (head.status === 400) {
+              const keyed = await upstream.send(upstream.url(bucket, key), { method: 'HEAD' });
+              if (keyed.ok) { count.already += 1; continue; }
+              if (keyed.status === 404) continue;
+              throw new Error(`${bucket}/${key} is encrypted with another key (HEAD → ${keyed.status})`);
+            }
             if (!head.ok) throw new Error(`HEAD ${bucket}/${key} → ${head.status}`);
-            const got = await raw.send(raw.url(bucket, key));
+            const got = await raw.send(raw.url(bucket, key), { headers: { 'accept-encoding': 'identity' } });
+            if (got.status === 404) continue;
             if (!got.ok) throw new Error(`GET ${bucket}/${key} → ${got.status}`);
-            const body = Buffer.from(await got.arrayBuffer());
+            // fetch would hand back decoded bytes; nothing in SPARC'd Next stores these.
+            if (got.headers.get('content-encoding')) throw new Error(`${bucket}/${key} has a content-encoding; encrypt it by hand`);
+            const etag = got.headers.get('etag');
+            if (!etag) throw new Error(`GET ${bucket}/${key} returned no ETag`);
+            const headers = { 'if-match': normalizeIfMatch(etag) };
+            for (const [name, value] of got.headers) {
+              if (KEEP_ON_REWRITE.has(name) || name.startsWith('x-amz-meta-')) headers[name] = value;
+            }
             const put = await upstream.send(upstream.url(bucket, key), {
               method: 'PUT',
-              body,
-              headers: {
-                'content-type': got.headers.get('content-type') ?? 'application/octet-stream',
-                'if-match': normalizeIfMatch(got.headers.get('etag')),
-              },
+              body: Buffer.from(await got.arrayBuffer()),
+              headers,
             });
             if (put.status === 412) { count.changed += 1; continue; }
             if (!put.ok) throw new Error(`PUT ${bucket}/${key} → ${put.status} ${await put.text()}`);

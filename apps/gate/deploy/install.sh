@@ -49,12 +49,21 @@ install -m 0644 "$GATE_SRC"/settings-example/* "$APP/settings-example/"
 install -d -m 0700 /etc/sparcd-next
 if [ ! -f "$ENV_FILE" ]; then
   umask 077
-  sed -e "s|^ACCESS_MASTER_KEY=.*|ACCESS_MASTER_KEY=$(openssl rand -base64 32)|"       -e "s|^DATA_KEY=.*|DATA_KEY=$(openssl rand -base64 32)|" \
-      -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}|" \
+  sed -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}|" \
+      -e '/^ACCESS_MASTER_KEY=/d' -e '/^DATA_KEY=/d' \
       "$GATE_SRC/deploy/gate.env.example" > "$ENV_FILE"
   umask 022
-  echo "wrote $ENV_FILE; fill in UPSTREAM, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, and back up DATA_KEY"
+  echo "wrote $ENV_FILE; fill in UPSTREAM, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY"
 fi
+# Keys are made once and never replaced. printf is a shell builtin, so a key
+# never appears in a process's arguments.
+for name in ACCESS_MASTER_KEY DATA_KEY; do
+  if ! grep -q "^$name=." "$ENV_FILE"; then
+    sed -i "/^$name=\$/d" "$ENV_FILE"
+    printf '%s=%s\n' "$name" "$(openssl rand -base64 32)" >> "$ENV_FILE"
+    echo "added $name to $ENV_FILE; back it up offline"
+  fi
+done
 chown root:root "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 

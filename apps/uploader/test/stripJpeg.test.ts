@@ -30,6 +30,23 @@ describe('stripJpeg', () => {
     expect(out.endsWith('\x56\xff\xd9')).toBe(true);
   });
 
+  it('walks every scan of a progressive photo, dropping metadata between scans', () => {
+    const between = new Uint8Array([
+      0xff, 0xd8,
+      ...seg(0xdb, 'tables'),
+      ...SOS.slice(0, -1),
+      ...seg(0xfe, 'mid comment ÿÙ fake end'),
+      ...seg(0xc4, 'huffman'),
+      ...SOS,
+      0xff, 0xd9,
+    ]);
+    const out = text(stripJpeg(between.slice().buffer));
+    expect(out).not.toContain('comment');
+    expect(out).toContain('huffman');
+    expect(out.split('ÿÚ')).toHaveLength(3);
+    expect(out.endsWith('VÿÙ')).toBe(true);
+  });
+
   it('refuses something that is not a whole JPEG', () => {
     expect(() => stripJpeg(new TextEncoder().encode('not a photo').buffer)).toThrow();
     expect(() => stripJpeg(jpeg.slice(0, 40).buffer)).toThrow();

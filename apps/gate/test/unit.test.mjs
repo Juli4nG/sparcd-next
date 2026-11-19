@@ -16,7 +16,7 @@ import {
 import { afterTree, decodeListingToken, encodeListingToken, listAroundAccess } from '../listing.mjs';
 import { loadMasterKey, wrapSecret, unwrapSecret, newPassword } from '../people.mjs';
 import { WORDS } from '../words.mjs';
-import { normalizeIfMatch, bucketKeyHeaders } from '../upstream.mjs';
+import { normalizeIfMatch, bucketKeyHeaders, makeUpstream } from '../upstream.mjs';
 import { createGate } from '../server.mjs';
 import { openAdmin } from '../cli.mjs';
 
@@ -31,14 +31,33 @@ test('server and CLI reject settings buckets that a person could own or outside 
   }
 });
 
+test('object requests carry a key made for their bucket; listings carry none; plain http is refused', async (t) => {
+  const dataKey = Buffer.alloc(32, 7);
+  const md5 = (bucket) => bucketKeyHeaders(dataKey, bucket)['x-amz-server-side-encryption-customer-key-md5'];
+  const seen = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (req) => {
+    const url = new URL(req.url);
+    seen.push([req.method, url.pathname + url.search, req.headers.get('x-amz-server-side-encryption-customer-key-md5')]);
+    return new Response('', { status: 200, headers: { etag: '"e"' } });
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const options = { endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey };
+  const up = makeUpstream(options);
+  await up.send(up.url('sparcd-next-ana', 'Media/x/thumb.jpg'));
+  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: Buffer.from('x') });
+  await up.put('sparcd-next-settings', 'lab.json', '{}');
+  await up.listPage('sparcd-next-ana', { prefix: 'Media/' });
+  assert.deepEqual(seen.map(([, , m]) => m), [md5('sparcd-next-ana'), md5('sparcd-next-ana'), md5('sparcd-next-settings'), null]);
+  assert.notEqual(md5('sparcd-next-ana'), md5('sparcd-next-ben'));
+  assert.throws(() => makeUpstream({ ...options, endpoint: 'http://objects.example.org' }), /https/);
+});
+
 test('gate HTTP requests and responses', async (t) => {
   const masterKey = Buffer.alloc(32, 9).toString('base64');
   const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
-  const dataKey = Buffer.alloc(32, 7);
-  const keyMd5 = new Map();
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    keyMd5.set(`${req.method} ${url.pathname}${url.search}`, req.headers['x-amz-server-side-encryption-customer-key-md5']);
     if (url.searchParams.get('prefix') === 'access/people/') {
       return res.end('<Contents><Key>access/people/ana.json</Key><ETag>person</ETag></Contents>');
     }
@@ -62,7 +81,7 @@ test('gate HTTP requests and responses', async (t) => {
     upstream.close(resolve);
   }));
   const gate = await createGate({
-    ...KEY, masterKey, dataKey: dataKey.toString('base64'), upstream: `http://127.0.0.1:${upstream.address().port}`,
+    ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
     allowedHosts: 'gate.test', log: () => {},
   });
   t.after(() => gate.close());
@@ -94,14 +113,7 @@ test('gate HTTP requests and responses', async (t) => {
     });
   };
 
-  await t.test('object requests carry a key made for their bucket; listings carry none', async () => {
-    await call(media);
-    await call(`${bucket}?list-type=2&prefix=Media/`);
-    const expected = bucketKeyHeaders(dataKey, 'sparcd-next-ana')['x-amz-server-side-encryption-customer-key-md5'];
-    assert.equal(keyMd5.get('GET /sparcd-next-ana/Media/test.html'), expected);
-    assert.notEqual(expected, bucketKeyHeaders(dataKey, 'sparcd-next-ben')['x-amz-server-side-encryption-customer-key-md5']);
-    assert.equal(keyMd5.get('GET /sparcd-next-ana?list-type=2&prefix=Media%2F'), undefined);
-    assert.equal(keyMd5.get('GET /sparcd-next-settings/access/people/ana.json'), bucketKeyHeaders(dataKey, 'sparcd-next-settings')['x-amz-server-side-encryption-customer-key-md5']);
+  await t.test('a client cannot send a storage key of its own', async () => {
     const sent = await call(media, { headers: { 'x-amz-server-side-encryption-customer-algorithm': 'AES256' } });
     assert.equal(sent.status, 403);
   });

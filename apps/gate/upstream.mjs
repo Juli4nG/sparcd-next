@@ -43,6 +43,9 @@ export function normalizeIfMatch(value) {
 
 export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secretAccessKey, dataKey }) {
   if (dataKey === undefined) throw new Error('makeUpstream needs dataKey (a key, or null for none)');
+  if (dataKey && new URL(endpoint).protocol !== 'https:') {
+    throw new Error('DATA_KEY needs an https UPSTREAM: the key travels with every request');
+  }
   const base = new URL(endpoint);
   const credentials = { accessKeyId, secretAccessKey, service: 's3', region };
   // Client traffic is never retried here: a proxied PUT is the caller's to
@@ -67,7 +70,9 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
     // Object reads and writes carry the bucket's key; listings and bucket
     // calls have no object and carry none. Unencrypted objects stored before
     // DATA_KEY existed still read back: RGW ignores the key for them.
-    const [, bucket, key] = /^\/([^/]+)\/(.+)$/.exec(new URL(u).pathname) ?? [];
+    // The bucket as storage decodes it, so `%61na` and `ana` get the same key.
+    const [, raw, key] = /^\/([^/]+)\/(.+)$/.exec(new URL(u).pathname) ?? [];
+    const bucket = raw && decodeURIComponent(raw);
     const method = (init.method ?? 'GET').toUpperCase();
     if (dataKey && key && ['GET', 'HEAD', 'PUT'].includes(method)) {
       if (!keys.has(bucket)) keys.set(bucket, bucketKeyHeaders(dataKey, bucket));
