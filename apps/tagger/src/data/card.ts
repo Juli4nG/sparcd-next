@@ -20,7 +20,7 @@ import {
   type Session,
   type Species,
 } from '@sparcd/bucket';
-import { eventsFromRows, tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
+import { tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
 
 export type ImageSize = 'thumb' | 'view';
 
@@ -29,14 +29,12 @@ export type ImageSize = 'thumb' | 'view';
  * for a card copied in from a share: those photos aren't the person's, so the
  * owner's filePublic rule doesn't apply. `imageUrl` is where each photo's
  * derived images come from, so a share can sign its own; `fresh` signs anew
- * after an image failed to load. `events` keeps each photo's burst (eventID)
- * when its tags are rewritten.
+ * after an image failed to load.
  */
 export type Card = {
   deployment: Deployment;
   photos: Media[];
   tags: Map<string, PhotoTag[]>;
-  events: Map<string, string>;
   own: boolean;
   imageUrl: (mediaID: string, size: ImageSize, fresh?: boolean) => Promise<string>;
 };
@@ -97,7 +95,6 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
     deployment,
     photos,
     tags: tagsFromRows(observations),
-    events: eventsFromRows(observations),
     own: !isShared(deployment),
     imageUrl: bucketImages(session.bucket),
   };
@@ -123,9 +120,7 @@ export async function saveTags(
   const media = new Map(card.photos.map((m) => [m.mediaID, m]));
   const rows = ids.flatMap((id) => {
     const tags = tagsOf(id);
-    // A tag applied to a whole burst carries its own eventID; otherwise the photo keeps the one its stored rows shared (FORMAT.md).
-    return tagRows(media.get(id)!, toBucketTags(tags), session.code, { timestamp: editedAt(id), eventID: card.events.get(id) })
-      .map((row, i) => (tags[i].eventID ? { ...row, eventID: tags[i].eventID } : row));
+    return tagRows(media.get(id)!, toBucketTags(tags), session.code, { timestamp: editedAt(id) }).map((row, i) => ({ ...row, eventID: tags[i].eventID ?? '' }));
   });
   const copies = ids.map((id) => media.get(id)!).filter((m) => !isOwnRow(m) && tagsOf(m.mediaID).length);
   const rowChanges: Changes = {

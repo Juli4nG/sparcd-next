@@ -46,13 +46,6 @@ export function tagsFromRows(observations: Observation[]): Map<string, PhotoTag[
   return tags;
 }
 
-/** Each photo's eventID, when all its rows share one: a burst tag made elsewhere that rewriting the photo's tags keeps. */
-export function eventsFromRows(observations: Observation[]): Map<string, string> {
-  const seen = new Map<string, string>();
-  for (const { mediaID, eventID = '' } of observations) seen.set(mediaID, seen.has(mediaID) && seen.get(mediaID) !== eventID ? '' : eventID);
-  return new Map([...seen].filter(([, id]) => id));
-}
-
 export const toBucketTags = (tags: PhotoTag[]): Tag[] =>
   tags.map((t) => ({ observationType: t.observationType, scientificName: t.scientificName, count: t.count }));
 
