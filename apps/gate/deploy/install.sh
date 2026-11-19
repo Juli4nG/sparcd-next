@@ -49,11 +49,11 @@ install -m 0644 "$GATE_SRC"/settings-example/* "$APP/settings-example/"
 install -d -m 0700 /etc/sparcd-next
 if [ ! -f "$ENV_FILE" ]; then
   umask 077
-  sed -e "s|^ACCESS_MASTER_KEY=.*|ACCESS_MASTER_KEY=$(openssl rand -base64 32)|" \
+  sed -e "s|^ACCESS_MASTER_KEY=.*|ACCESS_MASTER_KEY=$(openssl rand -base64 32)|"       -e "s|^DATA_KEY=.*|DATA_KEY=$(openssl rand -base64 32)|" \
       -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}|" \
       "$GATE_SRC/deploy/gate.env.example" > "$ENV_FILE"
   umask 022
-  echo "wrote $ENV_FILE; fill in UPSTREAM, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY"
+  echo "wrote $ENV_FILE; fill in UPSTREAM, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, and back up DATA_KEY"
 fi
 chown root:root "$ENV_FILE"
 chmod 0600 "$ENV_FILE"

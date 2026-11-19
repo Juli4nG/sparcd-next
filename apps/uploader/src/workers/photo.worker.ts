@@ -1,4 +1,5 @@
 import exifr from 'exifr';
+import { stripJpeg } from '../lib/stripJpeg';
 
 export type ReadResult = {
   sha256: string;
@@ -8,7 +9,15 @@ export type ReadResult = {
   model?: string;
 };
 
-export type Derived = { thumb: ArrayBuffer; thumbSha256: string; view: ArrayBuffer; viewSha256: string };
+export type Derived = {
+  thumb: ArrayBuffer;
+  thumbSha256: string;
+  view: ArrayBuffer;
+  viewSha256: string;
+  /** The photo as stored: the card's file without its camera data. */
+  original: ArrayBuffer;
+  originalSha256: string;
+};
 
 export type WorkerRequest = { kind: 'read'; file: File } | { kind: 'derive'; file: File };
 export type WorkerResponse = { ok: true; value: ReadResult | Derived } | { ok: false; error: string; name: string };
@@ -57,8 +66,13 @@ async function derive(file: File): Promise<Derived> {
     bitmap.close();
   }
   const thumb = scaled(view, view.width, view.height, 320);
-  const [[viewBytes, viewSha256], [thumbBytes, thumbSha256]] = await Promise.all([jpeg(view, 0.82), jpeg(thumb, 0.75)]);
-  return { thumb: thumbBytes, thumbSha256, view: viewBytes, viewSha256 };
+  const original = stripJpeg(await file.arrayBuffer()).buffer;
+  const [[viewBytes, viewSha256], [thumbBytes, thumbSha256], originalSha256] = await Promise.all([
+    jpeg(view, 0.82),
+    jpeg(thumb, 0.75),
+    sha256(original),
+  ]);
+  return { thumb: thumbBytes, thumbSha256, view: viewBytes, viewSha256, original, originalSha256 };
 }
 
 const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
@@ -69,7 +83,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     if (e.data.kind === 'read') post({ ok: true, value: await read(e.data.file) });
     else {
       const d = await derive(e.data.file);
-      post({ ok: true, value: d }, [d.thumb, d.view]);
+      post({ ok: true, value: d }, [d.thumb, d.view, d.original]);
     }
   } catch (err) {
     post({ ok: false, error: err instanceof Error ? err.message : String(err), name: err instanceof Error ? err.name : 'Error' });

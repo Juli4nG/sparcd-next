@@ -124,6 +124,30 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   60-second deadline and return 504 if it expires before the response starts.
 - A paused person gets 403 on everything.
 
+## Encryption at rest
+
+Every object the gate or its CLI reads or writes is stored encrypted with S3
+customer keys (SSE-C, AES-256), which Jetstream2's Ceph RGW supports over TLS.
+
+- `DATA_KEY` (32 bytes, base64) lives only in the gate's env file. Each
+  bucket's key is HKDF-SHA256(`DATA_KEY`, info `sparcd-next/data/v1/<bucket>`).
+- The gate adds the key to every object GET, HEAD and PUT on the way upstream,
+  so the apps and signed links work unchanged. Listings and bucket calls carry
+  no key. Clients cannot send a key of their own: `x-amz-server-side-encryption-*`
+  headers are refused.
+- Someone holding only the project key sees ciphertext: a GET or HEAD without
+  the bucket's key is refused by storage.
+- It does not protect against someone who controls the gate's host, which holds
+  both keys, nor against a person reading their own photos, which is the point.
+- **Back up `DATA_KEY` offline** (a password manager and a sealed copy). Losing
+  it loses every stored photo and table. Changing it needs a re-encryption run
+  and is not supported yet.
+- Objects stored before `DATA_KEY` existed still read: RGW ignores a customer
+  key for an unencrypted object. `node cli.mjs encrypt-stored` encrypts them in
+  place, safe while the gate runs.
+- `DATA_KEY=none` turns encryption off. It is for local MinIO without TLS,
+  which refuses customer keys.
+
 ## People and buckets
 
 - **People records:**
@@ -144,6 +168,7 @@ CLI (`node apps/gate/cli.mjs …`, run where the gate's env file is):
 | `pause <code>` / `resume <code>` | stops or restores access. The bucket is untouched |
 | `list` | code, name, status |
 | `settings put <file>…` | uploads `lab.json`, `sites.csv` or `species.json` to the settings bucket root |
+| `encrypt-stored` | encrypts objects stored before `DATA_KEY` was set; safe to repeat |
 
 - The CLI refuses any bucket name outside `sparcd-next-`, using the same
   namespace guard.
@@ -157,6 +182,7 @@ CLI (`node apps/gate/cli.mjs …`, run where the gate's env file is):
 | `S3_REGION` | `us-east-1` |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | the project key, never logged |
 | `ACCESS_MASTER_KEY` | base64, 32 bytes |
+| `DATA_KEY` | base64, 32 bytes; `none` only for storage without TLS |
 | `SETTINGS_BUCKET` | `sparcd-next-settings` |
 | `BUCKET_ALLOW` | `sparcd-next-*` |
 | `ALLOWED_HOSTS` | `server.example.org` (the Host clients sign) |

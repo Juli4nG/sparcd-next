@@ -83,6 +83,8 @@ async function main() {
     S3_ACCESS_KEY_ID: secrets.MINIO_ROOT_USER,
     S3_SECRET_ACCESS_KEY: secrets.MINIO_ROOT_PASSWORD,
     ACCESS_MASTER_KEY: secrets.ACCESS_MASTER_KEY,
+    // Local MinIO runs without TLS, and storage refuses customer keys over plain HTTP.
+    DATA_KEY: 'none',
     ALLOWED_HOSTS,
   };
   const pids = {};

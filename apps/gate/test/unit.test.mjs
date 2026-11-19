@@ -16,7 +16,7 @@ import {
 import { afterTree, decodeListingToken, encodeListingToken, listAroundAccess } from '../listing.mjs';
 import { loadMasterKey, wrapSecret, unwrapSecret, newPassword } from '../people.mjs';
 import { WORDS } from '../words.mjs';
-import { normalizeIfMatch } from '../upstream.mjs';
+import { normalizeIfMatch, bucketKeyHeaders } from '../upstream.mjs';
 import { createGate } from '../server.mjs';
 import { openAdmin } from '../cli.mjs';
 
@@ -26,7 +26,7 @@ const aws = new AwsClient({ ...KEY, service: 's3', region: 'us-east-1' });
 
 test('server and CLI reject settings buckets that a person could own or outside the prefix', async () => {
   for (const settingsBucket of ['lab-settings', 'sparcd-next-ana']) {
-    await assert.rejects(createGate({ settingsBucket, allow: '*' }), /SETTINGS_BUCKET/);
+    await assert.rejects(createGate({ settingsBucket, allow: '*', dataKey: 'none' }), /SETTINGS_BUCKET/);
     assert.throws(() => openAdmin({ SETTINGS_BUCKET: settingsBucket, BUCKET_ALLOW: '*' }), /SETTINGS_BUCKET/);
   }
 });
@@ -34,8 +34,11 @@ test('server and CLI reject settings buckets that a person could own or outside 
 test('gate HTTP requests and responses', async (t) => {
   const masterKey = Buffer.alloc(32, 9).toString('base64');
   const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
+  const dataKey = Buffer.alloc(32, 7);
+  const keyMd5 = new Map();
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    keyMd5.set(`${req.method} ${url.pathname}${url.search}`, req.headers['x-amz-server-side-encryption-customer-key-md5']);
     if (url.searchParams.get('prefix') === 'access/people/') {
       return res.end('<Contents><Key>access/people/ana.json</Key><ETag>person</ETag></Contents>');
     }
@@ -59,7 +62,7 @@ test('gate HTTP requests and responses', async (t) => {
     upstream.close(resolve);
   }));
   const gate = await createGate({
-    ...KEY, masterKey, upstream: `http://127.0.0.1:${upstream.address().port}`,
+    ...KEY, masterKey, dataKey: dataKey.toString('base64'), upstream: `http://127.0.0.1:${upstream.address().port}`,
     allowedHosts: 'gate.test', log: () => {},
   });
   t.after(() => gate.close());
@@ -90,6 +93,18 @@ test('gate HTTP requests and responses', async (t) => {
       req.end(body);
     });
   };
+
+  await t.test('object requests carry a key made for their bucket; listings carry none', async () => {
+    await call(media);
+    await call(`${bucket}?list-type=2&prefix=Media/`);
+    const expected = bucketKeyHeaders(dataKey, 'sparcd-next-ana')['x-amz-server-side-encryption-customer-key-md5'];
+    assert.equal(keyMd5.get('GET /sparcd-next-ana/Media/test.html'), expected);
+    assert.notEqual(expected, bucketKeyHeaders(dataKey, 'sparcd-next-ben')['x-amz-server-side-encryption-customer-key-md5']);
+    assert.equal(keyMd5.get('GET /sparcd-next-ana?list-type=2&prefix=Media%2F'), undefined);
+    assert.equal(keyMd5.get('GET /sparcd-next-settings/access/people/ana.json'), bucketKeyHeaders(dataKey, 'sparcd-next-settings')['x-amz-server-side-encryption-customer-key-md5']);
+    const sent = await call(media, { headers: { 'x-amz-server-side-encryption-customer-algorithm': 'AES256' } });
+    assert.equal(sent.status, 403);
+  });
 
   await t.test('removed operations and a plain bucket GET return 403', async () => {
     for (const [method, path] of [

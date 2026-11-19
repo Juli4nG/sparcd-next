@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 
 import { configFromEnv, withDefaults } from './server.mjs';
 import { makeGuard } from './namespace.mjs';
-import { makeUpstream } from './upstream.mjs';
+import { makeUpstream, loadDataKey, normalizeIfMatch } from './upstream.mjs';
 import { ownBucket, PERSON_CODE, RESERVED_CODES } from './rules.mjs';
 import {
   PEOPLE_PREFIX, personKey, newPassword, loadMasterKey, wrapSecret,
@@ -29,18 +29,21 @@ const USAGE = `usage: node cli.mjs <command>
   pause <code>               stop access (the bucket is untouched)
   resume <code>              restore access
   list                       code, name, status
-  settings put <file>...     upload lab.json, sites.csv or species.json`;
+  settings put <file>...     upload lab.json, sites.csv or species.json
+  encrypt-stored             encrypt files stored before DATA_KEY was set (safe to repeat)`;
 
 export function openAdmin(env = process.env) {
   const config = withDefaults(configFromEnv(env));
   const inNamespace = makeGuard(config.allow);
   if (!inNamespace(config.settingsBucket)) throw new Error('SETTINGS_BUCKET is outside BUCKET_ALLOW');
-  const upstream = makeUpstream({
+  const credentials = {
     endpoint: config.upstream,
     region: config.region,
     accessKeyId: config.accessKeyId,
     secretAccessKey: config.secretAccessKey,
-  });
+  };
+  const dataKey = loadDataKey(config.dataKey);
+  const upstream = makeUpstream({ ...credentials, dataKey });
   const settings = config.settingsBucket;
   const guarded = (bucket) => {
     if (!inNamespace(bucket)) throw new Error(`${bucket} is outside BUCKET_ALLOW`);
@@ -107,6 +110,49 @@ export function openAdmin(env = process.env) {
       return people.filter((p) => p.status !== 404).map(({ value: { code, name, status } }) => ({ code, name, status }));
     },
 
+    /**
+     * Encrypts every object stored before DATA_KEY was set, in the settings
+     * bucket and each person's bucket, in place. Safe while the gate runs: a
+     * file changed since it was read is left alone, because the gate already
+     * stored that change encrypted. Run it again until it reports nothing left.
+     */
+    async encryptStored(say) {
+      if (!dataKey) throw new Error('DATA_KEY is "none": there is no key to encrypt with');
+      const raw = makeUpstream({ ...credentials, dataKey: null });
+      const codes = (await this.list()).map((p) => p.code);
+      for (const bucket of [settings, ...codes.map(ownBucket)].map(guarded)) {
+        const keys = await upstream.listAll(bucket, '');
+        const count = { encrypted: 0, already: 0, changed: 0 };
+        let next = 0;
+        const lane = async () => {
+          while (next < keys.length) {
+            const { key } = keys[next++];
+            const head = await raw.send(raw.url(bucket, key), { method: 'HEAD' });
+            // RGW refuses a keyless HEAD of an object stored with a customer key.
+            if (head.status === 400) { count.already += 1; continue; }
+            if (head.status === 404) continue;
+            if (!head.ok) throw new Error(`HEAD ${bucket}/${key} → ${head.status}`);
+            const got = await raw.send(raw.url(bucket, key));
+            if (!got.ok) throw new Error(`GET ${bucket}/${key} → ${got.status}`);
+            const body = Buffer.from(await got.arrayBuffer());
+            const put = await upstream.send(upstream.url(bucket, key), {
+              method: 'PUT',
+              body,
+              headers: {
+                'content-type': got.headers.get('content-type') ?? 'application/octet-stream',
+                'if-match': normalizeIfMatch(got.headers.get('etag')),
+              },
+            });
+            if (put.status === 412) { count.changed += 1; continue; }
+            if (!put.ok) throw new Error(`PUT ${bucket}/${key} → ${put.status} ${await put.text()}`);
+            count.encrypted += 1;
+          }
+        };
+        await Promise.all(Array.from({ length: 8 }, lane));
+        say(`${bucket}: ${count.encrypted} encrypted, ${count.already} already encrypted, ${count.changed} changed meanwhile`);
+      }
+    },
+
     async putSettings(files) {
       for (const file of files) {
         const name = basename(file);
@@ -148,6 +194,9 @@ async function main(argv) {
       return;
     case 'list':
       for (const p of await admin.list()) process.stdout.write(`${p.code}\t${p.name}\t${p.status}\n`);
+      return;
+    case 'encrypt-stored':
+      await admin.encryptStored(say);
       return;
     case 'settings':
       if (rest[0] !== 'put' || rest.length < 2) break;
