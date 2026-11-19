@@ -22,6 +22,16 @@ const SETTINGS_FILES = {
   'species.json': 'application/json',
 };
 
+// Jetstream2 answers 429 to bursts; wait and try again rather than stop.
+async function patient(call) {
+  for (let attempt = 1; ; attempt += 1) {
+    const res = await call();
+    if (![429, 503].includes(res.status) || attempt === 8) return res;
+    await res.arrayBuffer();
+    await new Promise((resolve) => { setTimeout(resolve, 1000 * attempt); });
+  }
+}
+
 // Headers an object keeps when encrypt-stored rewrites it.
 const KEEP_ON_REWRITE = new Set([
   'content-type', 'content-disposition', 'content-language', 'cache-control', 'expires',
@@ -132,18 +142,18 @@ export function openAdmin(env = process.env) {
         const lane = async () => {
           while (next < keys.length) {
             const { key } = keys[next++];
-            const head = await raw.send(raw.url(bucket, key), { method: 'HEAD' });
+            const head = await patient(() => raw.send(raw.url(bucket, key), { method: 'HEAD' }));
             if (head.status === 404) continue;
             // RGW refuses a keyless HEAD of an object stored with a customer
             // key; this key must then read it.
             if (head.status === 400) {
-              const keyed = await upstream.send(upstream.url(bucket, key), { method: 'HEAD' });
+              const keyed = await patient(() => upstream.send(upstream.url(bucket, key), { method: 'HEAD' }));
               if (keyed.ok) { count.already += 1; continue; }
               if (keyed.status === 404) continue;
               throw new Error(`${bucket}/${key} is encrypted with another key (HEAD → ${keyed.status})`);
             }
             if (!head.ok) throw new Error(`HEAD ${bucket}/${key} → ${head.status}`);
-            const got = await raw.send(raw.url(bucket, key), { headers: { 'accept-encoding': 'identity' } });
+            const got = await patient(() => raw.send(raw.url(bucket, key), { headers: { 'accept-encoding': 'identity' } }));
             if (got.status === 404) continue;
             if (!got.ok) throw new Error(`GET ${bucket}/${key} → ${got.status}`);
             // fetch would hand back decoded bytes; nothing in SPARC'd Next stores these.
@@ -154,17 +164,14 @@ export function openAdmin(env = process.env) {
             for (const [name, value] of got.headers) {
               if (KEEP_ON_REWRITE.has(name) || name.startsWith('x-amz-meta-')) headers[name] = value;
             }
-            const put = await upstream.send(upstream.url(bucket, key), {
-              method: 'PUT',
-              body: Buffer.from(await got.arrayBuffer()),
-              headers,
-            });
+            const body = Buffer.from(await got.arrayBuffer());
+            const put = await patient(() => upstream.send(upstream.url(bucket, key), { method: 'PUT', body, headers }));
             if (put.status === 412) { count.changed += 1; continue; }
             if (!put.ok) throw new Error(`PUT ${bucket}/${key} → ${put.status} ${await put.text()}`);
             count.encrypted += 1;
           }
         };
-        await Promise.all(Array.from({ length: 8 }, lane));
+        await Promise.all(Array.from({ length: 4 }, lane));
         say(`${bucket}: ${count.encrypted} encrypted, ${count.already} already encrypted, ${count.changed} changed meanwhile`);
       }
     },
