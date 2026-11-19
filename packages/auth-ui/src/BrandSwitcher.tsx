@@ -4,9 +4,11 @@ import logo from './assets/sparcd.png';
 export type BrandSwitcherProps = {
   /** e.g. "Tagger" → wordmark "SPARC'd · Tagger"; also marks the current item. */
   toolName: string;
+  /** The apps in the menu; by default the siblings of this app's base path. */
+  tools?: Tool[];
 };
 
-type Tool = { name: string; href: string };
+export type Tool = { name: string; href: string };
 
 /**
  * Sibling URLs derived from this tool's own base path so the same code works
@@ -23,13 +25,13 @@ function siblingTools(): Tool[] {
   ];
 }
 
-export function BrandSwitcher({ toolName }: BrandSwitcherProps) {
+export function BrandSwitcher({ toolName, tools: given }: BrandSwitcherProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
 
-  const tools = siblingTools();
+  const tools = given ?? siblingTools();
 
   useEffect(() => {
     if (!open) return;

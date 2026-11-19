@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { readPackage, type Session } from '@sparcd/bucket';
 import { cardSummaries, type CardSummary } from './data/card';
+import { TAG_URL } from './App';
 import { deploymentLine, rangeOf } from './cardLine';
 import { PawStamp } from './ui/Paw';
 import { focusRing, press } from './ui/look';
@@ -11,9 +12,9 @@ const ALL = '';
 const siteOf = (c: CardSummary) => c.deployment.locationName || c.deployment.locationID || '';
 const rangeOfCard = (c: CardSummary) => rangeOf(c.deployment.deploymentGroups);
 
-const tagHref = (c: CardSummary) => `#card=${encodeURIComponent(c.deployment.deploymentID)}`;
+const tagHref = (c: CardSummary) => `${TAG_URL}#card=${encodeURIComponent(c.deployment.deploymentID)}`;
 
-export function Home({ session }: { session: Session }) {
+export function Home({ session, mode }: { session: Session; mode: 'upload' | 'tag' }) {
   const [cards, setCards] = useState<CardSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [site, setSite] = useState(ALL);
@@ -35,24 +36,24 @@ export function Home({ session }: { session: Session }) {
   return (
     <main className="h-full overflow-y-auto">
       <div className="max-w-[880px] mx-auto px-6 py-10 flex flex-col gap-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <a href="#send" className={`h-32 flex flex-col items-center justify-center gap-1 bg-ink text-paper border-2 border-ink hover:opacity-90 ${press} ${focusRing}`}>
-            <span className="font-display text-[30px] font-[600] leading-tight">Upload photos</span>
+        {mode === 'upload' ? (
+          <a href="#send" className={`h-32 flex items-center justify-center bg-ink text-paper border-2 border-ink hover:opacity-90 ${press} ${focusRing}`}>
+            <span className="font-display text-[34px] font-[600] leading-tight">Upload photos</span>
           </a>
+        ) : (
           <a
             href={shown[0] ? tagHref(shown[0]) : undefined}
             aria-disabled={!shown[0]}
             className={`h-32 flex flex-col items-center justify-center gap-1 border-2 ${
-              shown[0] ? `bg-panel text-ink border-ink hover:bg-paperHover ${press}` : 'bg-transparent text-inkMute border-ruleSoft cursor-default'
+              shown[0] ? `bg-ink text-paper border-ink hover:opacity-90 ${press}` : 'bg-transparent text-inkMute border-ruleSoft cursor-default'
             } ${focusRing}`}
           >
-            <span className="font-display text-[30px] font-[600] leading-tight">Tag photos</span>
-            <span className="text-[18px] text-inkSoft h-6">
-              {cards ? (left ? `${left.toLocaleString()} photos waiting` : 'Nothing waiting') : ''}
-            </span>
+            <span className="font-display text-[34px] font-[600] leading-tight">Tag photos</span>
+            <span className="text-[18px] h-6 opacity-80">{cards ? (left ? `${left.toLocaleString()} photos waiting` : 'Nothing waiting') : ''}</span>
           </a>
-        </div>
+        )}
 
+        {mode === 'tag' && (
         <section aria-labelledby="to-tag" className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h1 id="to-tag" className="font-display text-[28px] font-[600] text-ink">
@@ -105,8 +106,9 @@ export function Home({ session }: { session: Session }) {
             </ul>
           )}
         </section>
+        )}
 
-        {!!cards?.length && <Sent cards={cards} />}
+        {mode === 'upload' && !!cards?.length && <Sent cards={cards} />}
       </div>
     </main>
   );

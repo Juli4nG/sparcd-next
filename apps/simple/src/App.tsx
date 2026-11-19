@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  BrandSwitcher,
   ConnectionChip,
   clearSharedConnection,
   loadSessionConnection,
@@ -18,11 +19,22 @@ import { SimpleTag } from './tag/Simple';
 import { Dialog } from './ui/Dialog';
 import { GateSignIn } from './ui/GateSignIn';
 import { PawStamp } from './ui/Paw';
-import { focusRing } from './ui/look';
+import { focusRing, press } from './ui/look';
 
 loadSessionConnection();
 
-export const TOOL_NAME = 'Camera traps';
+/** One build serves the chooser at /simple/, the Uploader at /simple/upload/ and the Tagger at /simple/tag/. */
+export type Mode = 'choose' | 'upload' | 'tag';
+const BASE = import.meta.env.BASE_URL;
+export const MODE: Mode = location.pathname.startsWith(BASE + 'upload') ? 'upload' : location.pathname.startsWith(BASE + 'tag') ? 'tag' : 'choose';
+export const UPLOAD_URL = BASE + 'upload/';
+export const TAG_URL = BASE + 'tag/';
+const TOOLS = [
+  { name: 'Start', href: BASE },
+  { name: 'Uploader', href: UPLOAD_URL },
+  { name: 'Tagger', href: TAG_URL },
+];
+const TOOL_NAME = MODE === 'upload' ? 'Uploader' : MODE === 'tag' ? 'Tagger' : 'Start';
 
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => loadSharedTheme() ?? 'light');
@@ -99,15 +111,14 @@ export function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-paper">
       <header className="h-16 shrink-0 bg-panel border-b border-rule flex items-center gap-4 px-5">
-        <a
-          href="#"
-          onClick={(e) => sending && e.preventDefault()}
-          aria-label="Start"
-          className={`flex items-center gap-2.5 px-1.5 py-1 text-ink ${sending ? 'cursor-default' : 'hover:bg-paperHover'} ${focusRing}`}
-        >
-          <img src={logo} alt="" className="h-8 w-auto" />
-          <span className="font-display text-[24px] font-[600] leading-none whitespace-nowrap">SPARC'd</span>
-        </a>
+        {MODE === 'choose' ? (
+          <span className="flex items-center gap-2.5 px-1.5 py-1 text-ink">
+            <img src={logo} alt="" className="h-8 w-auto" />
+            <span className="font-display text-[24px] font-[600] leading-none whitespace-nowrap">SPARC'd</span>
+          </span>
+        ) : (
+          <BrandSwitcher toolName={TOOL_NAME} tools={TOOLS} />
+        )}
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <ConnectionChip
             identity={session.name}
@@ -130,8 +141,10 @@ export function App() {
           <CardPage key={route.id} session={session} cardId={route.id} />
         ) : route.page === 'send' ? (
           <SendFlow session={session} onSending={setSending} />
+        ) : MODE === 'choose' ? (
+          <Choose />
         ) : (
-          <Home session={session} />
+          <Home session={session} mode={MODE} />
         )}
       </div>
       {leaving && (
@@ -207,5 +220,21 @@ export function Message({ children, warn }: { children: ReactNode; warn?: boolea
         {children}
       </p>
     </div>
+  );
+}
+
+function Choose() {
+  const big = `h-40 flex items-center justify-center border-2 font-display text-[34px] font-[600] ${press} ${focusRing}`;
+  return (
+    <main className="h-full overflow-y-auto">
+      <div className="max-w-[880px] mx-auto px-6 py-16 grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <a href={UPLOAD_URL} className={`${big} bg-ink text-paper border-ink hover:opacity-90`}>
+          Upload photos
+        </a>
+        <a href={TAG_URL} className={`${big} bg-panel text-ink border-ink hover:bg-paperHover`}>
+          Tag photos
+        </a>
+      </div>
+    </main>
   );
 }

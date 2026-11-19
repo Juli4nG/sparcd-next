@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { S3Error, deploymentId, parseLab, parseSites, type Lab, type Session, type Site } from '@sparcd/bucket';
 import { useOnline } from '@sparcd/auth-ui';
-import { Message } from './App';
+import { Message, TAG_URL } from './App';
 import { cardLine, rangeOf } from './cardLine';
 import { scanDrop, scanFileList, type CardFile } from './send/scan';
 import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
@@ -580,7 +580,7 @@ function Done({ outcome, line }: { outcome: Outcome; line: string }) {
         )}
         <div className="mt-4 flex flex-wrap gap-4">
           {outcome.cardHasPhotos && (
-            <a href={`#card=${encodeURIComponent(outcome.deploymentID)}`} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
+            <a href={`${TAG_URL}#card=${encodeURIComponent(outcome.deploymentID)}`} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
               Tag them now
             </a>
           )}
