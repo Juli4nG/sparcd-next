@@ -61,7 +61,7 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
 
   if (step === 'card')
     return (
-      <Screen back="#" question="Put the card in and choose it">
+      <Screen back="#" question="Choose the folder of photos">
         <CardPicker
           card={card}
           onCard={setCard}
@@ -83,13 +83,13 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
     );
   if (step === 'date')
     return (
-      <Screen onBack={() => setStep('site')} question="When did you take the card out?" folder={folderOf(card)}>
+      <Screen onBack={() => setStep('site')} question="When were these photos collected?" folder={folderOf(card)}>
         <DatePicker date={date} guess={guessDate} onPick={(d) => (setDate(d), setStep('send'))} />
       </Screen>
     );
   if (step === 'send')
     return (
-      <Screen question="Sending your photos" folder={folderOf(card)}>
+      <Screen question="Uploading your photos" folder={folderOf(card)}>
         <Sending
           session={session}
           lab={settings.lab}
@@ -267,11 +267,11 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
           <>
             {(state === 'empty' || state === 'failed') && (
               <p className="text-[22px] text-warn">
-                {state === 'failed' ? 'That card couldn’t be read. Check it is still in, then try again.' : 'No photos there. Choose the card itself.'}
+                {state === 'failed' ? 'That folder couldn’t be read. Try again.' : 'No photos in that folder. Choose another one.'}
               </p>
             )}
             <button onClick={() => picker.current!.click()} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
-              Choose the card
+              Choose the folder
             </button>
             <p className="text-[20px] text-inkSoft">or drag it here</p>
           </>
@@ -280,7 +280,7 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
       <div className="h-12">
         {found && (
           <button onClick={() => picker.current!.click()} className={quietLink}>
-            Choose a different card
+            Choose a different folder
           </button>
         )}
       </div>
@@ -305,8 +305,8 @@ type Problem = { message: string; signIn?: boolean };
 function explain(err: unknown): Problem {
   const cause = err instanceof PhotoError ? err.cause : err;
   if (cause instanceof S3Error && cause.status === 403) return { message: 'You were signed out. Sign in again, then choose the same card. Photos already saved are not sent twice.', signIn: true };
-  if (cause instanceof Error && cause.name === 'NotFoundError') return { message: 'The card couldn’t be read. Check it is still in. Sending will try again by itself.' };
-  return { message: 'Sending paused for a moment. It will carry on by itself.' };
+  if (cause instanceof Error && cause.name === 'NotFoundError') return { message: 'The photos couldn’t be read. Check the memory card is still in. Uploading will try again by itself.' };
+  return { message: 'Uploading paused for a moment. It will carry on by itself.' };
 }
 
 function useWakeLock(active: boolean) {
@@ -452,7 +452,7 @@ function Sending({ session, lab, site, date, card, onDone }: { session: Session;
         <span className="block h-full bg-ok transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
       </div>
       <p className="h-12 font-display text-[36px] font-[600] text-ink tabular-nums" data-testid="sent-count">
-        {sendingNow ? `${done.toLocaleString()} of ${total.toLocaleString()} sent` : 'Getting the photos ready…'}
+        {sendingNow ? `${done.toLocaleString()} of ${total.toLocaleString()} uploaded` : 'Getting the photos ready…'}
       </p>
       <p className="h-8 text-[22px] text-inkSoft">
         {[already > 0 && `${already.toLocaleString()} already saved`, eta].filter(Boolean).join(' · ')}
@@ -468,7 +468,7 @@ function Sending({ session, lab, site, date, card, onDone }: { session: Session;
         </div>
       ) : !online ? (
         <p role="status" className="text-[22px] text-warn">
-          No internet. Sending will carry on when it’s back.
+          No internet. Uploading will carry on when it’s back.
         </p>
       ) : error ? (
         <p role="status" className="text-[22px] text-inkSoft">
@@ -490,10 +490,10 @@ function Done({ outcome, line }: { outcome: Outcome; line: string }) {
           ✓
         </p>
         <h1 className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="saved">
-          {outcome.leftOut.length ? `${photos(saved)} are saved` : `All ${photos(outcome.total)} are saved`}
+          {outcome.leftOut.length ? `${photos(saved)} are uploaded` : `All ${photos(outcome.total)} are uploaded`}
         </h1>
         <p className="-mt-2 text-[22px] text-inkSoft">{line}</p>
-        {outcome.alreadySaved > 0 && <p className="text-[22px] text-inkSoft">{photos(outcome.alreadySaved)} were already saved from before.</p>}
+        {outcome.alreadySaved > 0 && <p className="text-[22px] text-inkSoft">{photos(outcome.alreadySaved)} were already uploaded before.</p>}
         {outcome.leftOut.length > 0 && (
           <p className="text-[22px] text-inkSoft">{photos(outcome.leftOut.length)} couldn’t be read, so they were left out.</p>
         )}

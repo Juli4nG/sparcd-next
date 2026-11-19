@@ -37,7 +37,7 @@ export function Home({ session }: { session: Session }) {
       <div className="max-w-[880px] mx-auto px-6 py-10 flex flex-col gap-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <a href="#send" className={`h-32 flex flex-col items-center justify-center gap-1 bg-ink text-paper border-2 border-ink hover:opacity-90 ${press} ${focusRing}`}>
-            <span className="font-display text-[30px] font-[600] leading-tight">Send photos from a card</span>
+            <span className="font-display text-[30px] font-[600] leading-tight">Upload photos</span>
           </a>
           <a
             href={shown[0] ? tagHref(shown[0]) : undefined}
@@ -76,7 +76,7 @@ export function Home({ session }: { session: Session }) {
               <p className="text-[20px] text-inkSoft">Loading…</p>
             </div>
           ) : !cards.length ? (
-            <p className="text-[20px] text-inkSoft">Nothing to tag yet. Send the photos from a card first.</p>
+            <p className="text-[20px] text-inkSoft">Nothing to tag yet. Upload some photos first.</p>
           ) : !waiting.length ? (
             <p className="text-[20px] text-ok">Every photo is tagged. Thank you!</p>
           ) : !shown.length ? (
@@ -132,7 +132,7 @@ function Filter({ label, all, value, options, onChange }: { label: string; all: 
   );
 }
 
-/** Every card sent, closed until asked for. */
+/** Every upload, closed until asked for. */
 function Sent({ cards }: { cards: CardSummary[] }) {
   return (
     <details className="group border-t border-rule pt-4">
@@ -140,12 +140,12 @@ function Sent({ cards }: { cards: CardSummary[] }) {
         <span aria-hidden className="inline-block transition-transform group-open:rotate-90">
           ›
         </span>
-        Cards you've sent ({cards.length.toLocaleString()})
+        Your uploads ({cards.length.toLocaleString()})
       </summary>
       <table className="mt-3 w-full text-left text-[17px]">
         <thead className="text-inkMute text-[15px]">
           <tr className="border-b border-ruleSoft">
-            <th className="py-2 pr-4 font-[500]">Card</th>
+            <th className="py-2 pr-4 font-[500]">Upload</th>
             <th className="py-2 pr-4 font-[500] text-right">Photos</th>
             <th className="py-2 font-[500] text-right">Tagged</th>
           </tr>

@@ -113,7 +113,7 @@ export function App() {
             identity={session.name}
             onDisconnect={signOutNow}
             disconnectDisabled={sending}
-            disconnectExplanation="Wait until your photos are sent."
+            disconnectExplanation="Wait until your photos are uploaded."
           />
           <button
             onClick={toggleTheme}
