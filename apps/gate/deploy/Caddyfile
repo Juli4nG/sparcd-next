@@ -30,6 +30,14 @@
 		file_server
 	}
 
+	redir /simple /simple/
+	handle_path /simple/* {
+		root * /srv/sparcd-next/simple
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+
 	handle {
 		root * /srv/sparcd-next/home
 		encode zstd gzip
