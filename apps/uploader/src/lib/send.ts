@@ -98,7 +98,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const total = job.card.length;
     const sentBefore = unread.length + plan.skip.length + plan.rowOnly.length;
     let done = sentBefore;
-    const startedAt = performance.now();
+    let startedAt = performance.now();
     job.onProgress({ phase: 'sending', done, total, startedAt, sentBefore });
 
     let saving: Promise<unknown> = Promise.resolve();
@@ -116,6 +116,8 @@ export async function sendCard(job: Job): Promise<Outcome> {
 
     const rowOnly = plan.rowOnly.map((p) => mediaRow(p, deploymentID));
     for (let i = 0; i < rowOnly.length; i += CHECKPOINT_EVERY) await save(rowOnly.slice(i, i + CHECKPOINT_EVERY));
+    // Time left is judged from new photos only, not from catching up on saved ones.
+    startedAt = performance.now();
 
     const pending: Media[] = [];
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
