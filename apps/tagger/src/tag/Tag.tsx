@@ -41,7 +41,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
   const photos = card.photos;
 
   const [view, setView] = useState<'grid' | 'focus'>('grid');
-  const [focus, setFocus] = useState(() => Math.max(0, photos.findIndex((p) => !card.tags.get(p.mediaID)?.length)));
+  const [focus, setFocus] = useState(() => Math.max(0, photos.findIndex((p) => !tags.get(p.mediaID)?.length)));
   const [anchor, setAnchor] = useState(focus);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<Filter>('all');
