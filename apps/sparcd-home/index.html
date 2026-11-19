@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SPARC'd · Tools</title>
+    <title>SPARC'd Next</title>
     <meta
       name="description"
-      content="A small set of focused tools that work alongside SPARC'd."
+      content="Send camera-trap photos and tag them."
     />
     <link rel="icon" type="image/png" sizes="any" href="sparcd.png" />
     <link rel="alternate icon" href="favicon.ico" />
-    <meta property="og:title" content="SPARC'd · Tools" />
+    <meta property="og:title" content="SPARC'd Next" />
     <meta
       property="og:description"
-      content="A small set of focused tools that work alongside SPARC'd."
+      content="Send camera-trap photos and tag them."
     />
     <meta property="og:image" content="sparcd.png" />
     <meta property="og:type" content="website" />
@@ -257,7 +257,7 @@
       /* ── Tool cards ────────────────────────────────────────────────── */
       .deck {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: clamp(0.85rem, 2vw, 1.1rem);
       }
       @media (max-width: 720px) {
@@ -270,7 +270,7 @@
         position: relative;
         display: flex;
         flex-direction: column;
-        min-height: clamp(150px, 26vw, 190px);
+        min-height: clamp(180px, 30vw, 240px);
         padding: clamp(1rem, 2.6vw, 1.35rem);
         background-color: var(--panel);
         border: 1px solid var(--rule);
@@ -290,7 +290,7 @@
       .card h2 {
         font-family: 'Newsreader', Georgia, serif;
         font-weight: 600;
-        font-size: clamp(1.3rem, 4vw, 1.6rem);
+        font-size: clamp(1.7rem, 5vw, 2.3rem);
         line-height: 1.05;
         margin: 0.5rem 0 0.45rem;
         letter-spacing: -0.01em;
@@ -403,9 +403,6 @@
       .deck .card:nth-child(2) {
         animation-delay: 0.42s;
       }
-      .deck .card:nth-child(3) {
-        animation-delay: 0.5s;
-      }
       .d7 {
         animation-delay: 0.72s;
       }
@@ -422,7 +419,7 @@
       <header class="masthead reveal d1">
         <img src="sparcd.png" alt="" />
         <span class="wordmark"
-          >SPARC'd <span class="dot">·</span> <span class="sub">Tools</span></span
+          >SPARC'd <span class="dot">·</span> <span class="sub">Next</span></span
         >
         <button
           type="button"
@@ -435,31 +432,21 @@
       </header>
 
       <section class="intro reveal d2">
-        <p>
-          A small set of <em>focused tools</em> that work alongside SPARC'd —
-          browse a collection, add new uploads, and tag observations.
-        </p>
+        <p>Send your camera's photos, then <em>tag what's in them</em>.</p>
       </section>
 
       <nav class="deck" aria-label="Tools">
-        <a class="card reveal" href="uploader/">
-          <span class="num">Add</span>
-          <h2>Uploader</h2>
-          <p>Stage and publish new uploads to a collection.</p>
+        <a class="card reveal" href="/upload/">
+          <span class="num">1</span>
+          <h2>Send photos</h2>
+          <p>Put the photos from an SD card into your own storage.</p>
           <span class="go"><span>Open</span><span class="arrow" aria-hidden="true">→</span></span>
         </a>
 
-        <a class="card reveal" href="tagger/">
-          <span class="num">Refine</span>
-          <h2>Tagger</h2>
-          <p>Tag observations with species, counts, and notes.</p>
-          <span class="go"><span>Open</span><span class="arrow" aria-hidden="true">→</span></span>
-        </a>
-
-        <a class="card reveal" href="explorer/">
-          <span class="num">Read</span>
-          <h2>Explorer</h2>
-          <p>Browse a collection on a map, with thumbnails and tags.</p>
+        <a class="card reveal" href="/tag/">
+          <span class="num">2</span>
+          <h2>Tag photos</h2>
+          <p>Say which animals are in the photos you sent.</p>
           <span class="go"><span>Open</span><span class="arrow" aria-hidden="true">→</span></span>
         </a>
       </nav>

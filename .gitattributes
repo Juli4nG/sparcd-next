@@ -1,0 +1,2 @@
+# Golden fixtures are compared byte for byte, so keep their line endings as committed.
+packages/camtrap/test/fixtures/** -text

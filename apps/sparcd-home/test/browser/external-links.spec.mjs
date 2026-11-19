@@ -49,8 +49,8 @@ for (const width of [320, 1280]) {
 }
 
 test('keyboard activation opens each destination separately and preserves Home', async ({ page }) => {
-  // Theme button and the three existing app cards precede the footer links.
-  for (let i = 0; i < 4; i++) await page.keyboard.press('Tab');
+  // Theme button and the two app cards precede the footer links.
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
   for (const [label, url] of destinations) {
     await page.keyboard.press('Tab');
     const link = page.getByRole('link', { name: label, exact: true });
