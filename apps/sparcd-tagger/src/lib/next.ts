@@ -177,7 +177,7 @@ export async function uploadFiles(uploadPrefix: string): Promise<UploadFiles> {
       mimeType: m.fileMediatype ?? 'image/jpeg',
       comments: '',
     }))),
-    observations: serializeObservations(observations),
+    observations: lastWrittenFor(uploadPrefix, serializeObservations(observations)),
     deployments: deployment ? serializeDeployments([{
       deploymentId: id,
       locationId: deployment.locationID ?? '',
@@ -196,6 +196,16 @@ export async function uploadFiles(uploadPrefix: string): Promise<UploadFiles> {
       description: `${deployment?.locationName ?? id} - collected ${id.split('_').at(-1)}`,
     })),
   };
+}
+
+// The Tagger's own body for observations.csv carries more than the package
+// keeps (review markers, its own timestamps). While the package still says
+// what that body said, hand the body back, so Undo and the conflict check see
+// exactly what this tab wrote.
+const lastWritten = new Map<string, { generated: string; body: string }>();
+function lastWrittenFor(uploadPrefix: string, generated: string): string {
+  const last = lastWritten.get(uploadPrefix);
+  return last?.generated === generated ? last.body : generated;
 }
 
 const tagKey = (tags: { s: string; c: number }[]) => tags.map((t) => `${t.s}:${t.c}`).sort().join('|');
@@ -228,7 +238,11 @@ export async function saveObservations(uploadPrefix: string, body: string): Prom
     list.push({ s, c: Number(o.count) || 1 });
   }
   const changed = photos.filter((m) => tagKey(wanted.get(m.mediaID)!) !== tagKey(current.get(m.mediaID)!));
-  if (!changed.length) return;
+  const remember = async () => {
+    lastWritten.delete(uploadPrefix);
+    lastWritten.set(uploadPrefix, { generated: (await uploadFiles(uploadPrefix)).observations, body });
+  };
+  if (!changed.length) return remember();
   const at = nowTimestamp();
   const newRows = changed.flatMap((m) => tagRows(m, wanted.get(m.mediaID)!.map((t): Tag => {
     const observationType = types.get(t.s)?.type ?? 'animal';
@@ -240,4 +254,5 @@ export async function saveObservations(uploadPrefix: string, body: string): Prom
     media: (m) => applyFilePublic(m, newRows, ids),
   }, await aboutPerson());
   clearPackageCache();
+  await remember();
 }
