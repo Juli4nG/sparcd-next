@@ -83,6 +83,11 @@ import {
   speciesCountFromPrefix,
 } from '../lib/speciesCountPrefix';
 
+// SPARC'd Next saves species only: the place and time come from the card's
+// site and camera, and there is no questionable flag in the package. Their
+// controls stay in the code, hidden.
+const NEXT_PLACE_AND_TIME = false;
+
 const RECENT_LIMIT = 12;
 const EMPTY: TagImage[] = []; // stable ref so memos don't churn before data loads
 
@@ -1071,7 +1076,7 @@ export function Tag() {
             ]}
           />
         )}
-        {view === 'overview' && expertToggle('left')}
+        {NEXT_PLACE_AND_TIME && view === 'overview' && expertToggle('left')}
 
         <span className="text-[12px] font-mono text-inkSoft">
           {selected.size > 0 ? (
@@ -1097,7 +1102,7 @@ export function Tag() {
         {/* Change location entry (issue #279) — corrects the whole upload's
             recorded camera location. Not available for a local (offline) batch,
             which has no connection to fetch the shared location registry. */}
-        {canChangeLocation && (
+        {NEXT_PLACE_AND_TIME && canChangeLocation && (
           <button
             disabled={!identityReady}
             aria-describedby={!identityReady ? 'tagger-identity-required' : undefined}
@@ -1121,7 +1126,7 @@ export function Tag() {
         {/* Upload time-shift entry + persistent active-offset indicator (§08).
             Disabled when no image in the upload has a capture time to shift —
             unless a shift is already in effect, so it stays reachable to clear. */}
-        <DisabledActionHint label="Time shift" reason={!identityReady ? IDENTITY_REQUIRED : !sampleTimestamp && !hasUploadShift ? 'No image in this upload has a capture time to shift' : undefined}>
+        {NEXT_PLACE_AND_TIME && <DisabledActionHint label="Time shift" reason={!identityReady ? IDENTITY_REQUIRED : !sampleTimestamp && !hasUploadShift ? 'No image in this upload has a capture time to shift' : undefined}>
         <button
           onClick={() => setShowTimeShift(true)}
           disabled={!identityReady || (!sampleTimestamp && !hasUploadShift)}
@@ -1141,12 +1146,12 @@ export function Tag() {
           <span aria-hidden>◷</span>
           {hasUploadShift ? `clock ${formatOffsetDelta(timeOffset)}` : 'Time shift'}
         </button>
-        </DisabledActionHint>
+        </DisabledActionHint>}
 
         {/* Shift only explicitly selected frames — e.g. one mis-set camera in a
             mixed upload. Stored as per-image corrections, so it stacks on the
             upload offset. */}
-        {!!current && (
+        {NEXT_PLACE_AND_TIME && !!current && (
           <DisabledActionHint label="Time shift selection" reason={!identityReady ? IDENTITY_REQUIRED : selected.size === 0 || scopedTimeApplicableCount === 0 ? scopedTimeUnavailableReason : undefined}>
             <button
               onClick={openBulkTime}
@@ -1287,7 +1292,7 @@ export function Tag() {
               </div>
             )}
             <div className="col-span-2 row-start-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 flex w-full min-w-0 items-center justify-end gap-2">
-              {expertToggle('right')}
+              {NEXT_PLACE_AND_TIME && expertToggle('right')}
               {locationLabel && (
                 <span className="min-w-0 max-w-[35vw] truncate font-mono text-[10px] text-inkSoft"
                   aria-label={`Location: ${locationLabel}`} title={`Location: ${locationLabel}`}>
@@ -1478,7 +1483,7 @@ export function Tag() {
             detagCount={detagImages.length}
             detagSelection={selected.size > 0}
           />
-          {current && (
+          {NEXT_PLACE_AND_TIME && current && (
             <button
               type="button"
               disabled={!identityReady}
