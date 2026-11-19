@@ -158,6 +158,7 @@ export function App() {
       {SHOW_OLD_STORAGE_FEATURES && <AutomaticSpeciesCache />}
       <Connection
         toolName="Uploader"
+        sameOrigin
         initialConfig={connectPrefill}
         onConnect={connect}
         onTestConnection={(config) => checkSignIn(config)}

@@ -16,6 +16,14 @@ type Tool = { name: string; href: string };
 function siblingTools(): Tool[] {
   const base = import.meta.env.BASE_URL || '/';
   const root = base.replace(/[^/]+\/$/, '');
+  // SPARC'd Next serves the classic apps at /classic/upload/ and /classic/tag/, under the home page at /.
+  if (root.endsWith('/classic/')) {
+    return [
+      { name: 'Home', href: root.replace(/classic\/$/, '') },
+      { name: 'Uploader', href: `${root}upload/` },
+      { name: 'Tagger', href: `${root}tag/` },
+    ];
+  }
   return [
     { name: 'Home', href: root },
     { name: 'Explorer', href: `${root}explorer/` },
