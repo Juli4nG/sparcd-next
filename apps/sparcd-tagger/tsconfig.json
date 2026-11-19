@@ -22,6 +22,7 @@
       "@sparcd/auth-ui": ["../../packages/auth-ui/src/index.ts"],
       "@sparcd/camtrap": ["../../packages/camtrap/src/index.ts"],
       "@sparcd/flip": ["../../packages/flip/src/index.ts"],
+      "@sparcd/bucket": ["../../packages/bucket/src/index.ts"],
       "@/*": ["./src/*"]
     }
   },

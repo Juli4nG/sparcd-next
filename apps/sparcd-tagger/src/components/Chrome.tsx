@@ -10,7 +10,8 @@ import { AutomaticSaveStatus, useAutomaticSave } from './AutomaticSave';
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'browse', label: 'Browse' },
   { id: 'tag', label: 'Tag' },
-  { id: 'history', label: 'Recovery' },
+  // SPARC'd Next keeps no snapshots, so Recovery has nothing to show.
+  // { id: 'history', label: 'Recovery' },
   { id: 'settings', label: 'Settings' },
 ];
 

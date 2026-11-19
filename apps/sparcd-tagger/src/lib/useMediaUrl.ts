@@ -47,10 +47,11 @@ export function useMediaUrl(
   const localUrl = useObjectUrl(useLocalBatch((s) => s.media[objectKey]));
 
   const { data, isError } = useQuery({
-    queryKey: ['presign', connectionId, objectKey],
+    // Grids (low priority) get thumb.jpg, the large view gets view.jpg.
+    queryKey: ['presign', connectionId, objectKey, priority],
     queryFn: () => {
       const { bucket } = parseCollectionKey(collectionKey!);
-      return presignImage(cfg!, bucket, objectKey);
+      return presignImage(cfg!, bucket, objectKey, priority === 'low' ? 'thumb' : 'view');
     },
     enabled: !isLocal && !!cfg && !!collectionKey,
     staleTime: 50 * 60 * 1000, // under the 1h URL TTL

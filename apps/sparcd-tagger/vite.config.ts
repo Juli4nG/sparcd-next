@@ -11,9 +11,8 @@ export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, '**/.features-gen/**'],
   },
-  // Served from a subpath on GitHub Pages: culverlab.github.io/sparcd-exploration/tagger/
-  // A fork with another repo name sets PAGES_ROOT.
-  base: `${process.env.PAGES_ROOT ?? '/sparcd-exploration/'}tagger/`,
+  // Served by the gate's Caddy beside the new apps.
+  base: '/classic/tag/',
   server: { port: 5312 },
   plugins: [react()],
   resolve: {
@@ -23,6 +22,7 @@ export default defineConfig({
       '@sparcd/auth-ui': pkg('auth-ui', 'index.ts'),
       '@sparcd/camtrap': pkg('camtrap', 'index.ts'),
       '@sparcd/flip': pkg('flip', 'index.ts'),
+      '@sparcd/bucket': pkg('bucket', 'index.ts'),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
