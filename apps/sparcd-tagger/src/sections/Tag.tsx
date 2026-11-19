@@ -2568,7 +2568,7 @@ function handleKey(e: KeyboardEvent, s: HandlerState): void {
       return;
     case ' ':
       e.preventDefault();
-      if (e.shiftKey) {
+      if (e.shiftKey && NEXT_PLACE_AND_TIME) {
         const focusedTile = e.target instanceof HTMLButtonElement &&
           e.target.matches('[data-testid="overview-image"]');
         const focusedTileIndex = focusedTile ? Number(e.target.dataset.imageIndex) : NaN;
