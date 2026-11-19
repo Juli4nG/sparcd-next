@@ -1,0 +1,38 @@
+# SPARC'd Next on one origin. Caddy gets the certificate and serves HTTP/2 on
+# 443 by itself. install.sh sets SITE_ADDRESS in a systemd drop-in for caddy.
+
+{$SITE_ADDRESS} {
+	# Host is part of the signature, so it goes to the gate unchanged.
+	handle /-/* {
+		reverse_proxy 127.0.0.1:8787 {
+			header_up Host {http.request.hostport}
+		}
+	}
+	handle /sparcd-next-* {
+		reverse_proxy 127.0.0.1:8787 {
+			header_up Host {http.request.hostport}
+		}
+	}
+
+	redir /upload /upload/
+	handle_path /upload/* {
+		root * /srv/sparcd-next/upload
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+
+	redir /tag /tag/
+	handle_path /tag/* {
+		root * /srv/sparcd-next/tag
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+
+	handle {
+		root * /srv/sparcd-next/home
+		encode zstd gzip
+		file_server
+	}
+}

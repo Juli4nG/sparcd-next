@@ -1,0 +1,31 @@
+[Unit]
+Description=SPARC'd Next gate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sparcd
+Group=sparcd
+WorkingDirectory=/opt/sparcd-next/gate
+# Read by systemd as root, so the file stays root-only (0600).
+EnvironmentFile=/etc/sparcd-next/gate.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/sparcd-next/gate/server.mjs
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target

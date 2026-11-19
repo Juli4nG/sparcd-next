@@ -121,7 +121,9 @@ Leave `changeOrigin` off: rewriting Host breaks every signature.
   and streaming payloads are refused, so turn off the AWS SDK's flexible
   checksums (`requestChecksumCalculation: 'WHEN_REQUIRED'`) and hash Blob
   bodies yourself.
-- `If-None-Match: *`, signed, on every PutObject under `Media/`.
+- `If-None-Match: *`, signed, on every PutObject under `Media/`. It's also
+  forwarded on CompleteMultipartUpload, where MinIO answers 412 if the photo
+  already exists; the gate only requires it on PutObject.
 - Presigned URLs: GET or HEAD, at most 7,200 s, or 604,800 s for
   `Media/<sha256>/thumb.jpg`, `Media/<sha256>/view.jpg` and `shared/…`.
 
