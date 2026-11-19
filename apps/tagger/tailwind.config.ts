@@ -1,0 +1,22 @@
+import type { Config } from 'tailwindcss';
+
+const token = (name: string) => `color-mix(in srgb, var(--${name}) calc(<alpha-value> * 100%), transparent)`;
+
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    borderRadius: { none: '0', DEFAULT: '0', full: '9999px' },
+    extend: {
+      colors: Object.fromEntries(
+        ['paper', 'paperHover', 'panel', 'panelHover', 'ink', 'inkSoft', 'inkMute', 'rule', 'ruleSoft', 'accent', 'accentSoft', 'warn', 'ok', 'mark'].map(
+          (name) => [name, token(name)],
+        ),
+      ),
+      fontFamily: {
+        display: ['Newsreader', 'Georgia', 'serif'],
+        body: ['"Inter Tight"', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+      },
+    },
+  },
+} satisfies Config;
