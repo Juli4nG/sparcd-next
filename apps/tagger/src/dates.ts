@@ -15,7 +15,7 @@ export function cardTitle(d: Deployment): string {
 
 /** "Santa Rita Mountains – Cholla Flat – cholla-flat – 46 photos – November 19, 2026", as volunteers describe a card. */
 export function cardDescription(d: Deployment, photos: number): string {
-  const range = (d.deploymentGroups ?? '').split('|')[0].trim();
+  const range = /(?:^|\|)\s*area:([^|]*)/.exec(d.deploymentGroups ?? '')?.[1].trim();
   const site = d.locationName || (d.locationID ?? '');
   const date = day.format(new Date(`${d.deploymentID.slice(-10)}T00:00:00Z`));
   return [range, site, d.locationID ?? '', `${photos.toLocaleString()} photo${photos === 1 ? '' : 's'}`, date].filter(Boolean).join(' – ');

@@ -18,7 +18,7 @@ async function loadCards(session: Session, sites: Site[]): Promise<Card[]> {
         deploymentID: d.deploymentID,
         site,
         date: d.deploymentID.slice(-10),
-        description: cardDescription(d.deploymentGroups ?? '', site, d.locationID ?? '', photos.get(d.deploymentID) ?? 0, d.deploymentID.slice(-10)),
+        description: cardDescription(/(?:^|\|)\s*area:([^|]*)/.exec(d.deploymentGroups ?? '')?.[1].trim() ?? '', site, d.locationID ?? '', photos.get(d.deploymentID) ?? 0, d.deploymentID.slice(-10)),
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date) || a.site.localeCompare(b.site));
