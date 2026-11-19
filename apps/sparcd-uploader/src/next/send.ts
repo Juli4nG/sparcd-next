@@ -4,6 +4,7 @@ import {
   mergeMedia,
   readTable,
   savePackage,
+  type Bucket,
   type Changes,
   type Lab,
   type Media,
@@ -15,6 +16,7 @@ import type { ReadResult } from './photo.worker';
 import { deploymentRow, keysOf, mediaRow, planSend, toPhotos, type Photo } from './photos';
 import { createPool, type Pool } from './pool';
 import type { CardFile } from './scan';
+import { uploadBuckets } from './session';
 
 export const CHECKPOINT_EVERY = 250;
 const PARALLEL = 6;
@@ -120,9 +122,9 @@ export async function sendCard(job: Job): Promise<Outcome> {
     startedAt = performance.now();
 
     const pending: Media[] = [];
-    const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
+    const sendOne = async ({ photo, missing }: (typeof plan.send)[number], bucket: Bucket) => {
       try {
-        await putPhoto(session, photo, missing, pool);
+        await putPhoto(bucket, photo, missing, pool);
         pending.push(mediaRow(photo, deploymentID));
       } catch (err) {
         if (!photoProblem(err)) throw new PhotoError(photo.path, err);
@@ -132,18 +134,20 @@ export async function sendCard(job: Job): Promise<Outcome> {
       if (pending.length >= CHECKPOINT_EVERY) await save(pending.splice(0));
     };
 
+    // One lane per address at least; each lane keeps to its own shard.
+    const buckets = plan.send.length ? await uploadBuckets(session) : [session.bucket];
     let next = 0;
     let failure: unknown;
-    const lane = async () => {
+    const lane = async (bucket: Bucket) => {
       while (next < plan.send.length && !failure && !job.signal.aborted) {
         try {
-          await sendOne(plan.send[next++]);
+          await sendOne(plan.send[next++], bucket);
         } catch (err) {
           failure ??= err;
         }
       }
     };
-    await Promise.all(Array.from({ length: PARALLEL }, lane));
+    await Promise.all(Array.from({ length: Math.max(PARALLEL, buckets.length) }, (_, i) => lane(buckets[i % buckets.length])));
     await saving;
     if (failure) throw failure;
     const saved = await save(pending.splice(0));
@@ -165,10 +169,10 @@ export async function sendCard(job: Job): Promise<Outcome> {
  * Every file is made before any is stored, so a photo that can't be decoded
  * never has its original stored. The original goes up without its camera data.
  */
-async function putPhoto(session: Session, photo: Photo, missing: string[], pool: Pool) {
+async function putPhoto(bucket: Bucket, photo: Photo, missing: string[], pool: Pool) {
   const keys = keysOf(photo);
   const put = (key: string, body: ArrayBuffer, sha256: string) =>
-    session.bucket.putObject(key, new Uint8Array(body), { contentType: 'image/jpeg', sha256 });
+    bucket.putObject(key, new Uint8Array(body), { contentType: 'image/jpeg', sha256 });
   const d = await pool.derive(photo.file);
   await Promise.all([
     missing.includes('thumb') && put(keys.thumb, d.thumb, d.thumbSha256),
