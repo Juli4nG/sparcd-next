@@ -1,8 +1,9 @@
 import { AutomaticSpeciesCache } from './components/AutomaticSpeciesCache';
 import { useEffect, useRef, useState } from 'react';
 import { WorkflowNotice } from './components/WorkflowNotice';
-import { Connection, OfflineApps, loadPersistedConnection } from '@sparcd/auth-ui';
-import { testConnection } from '@sparcd/s3-safe';
+import { Connection } from '@sparcd/auth-ui';
+import { checkSignIn, resumeSession } from './next/session';
+import { SHOW_OLD_STORAGE_FEATURES } from './next/features';
 import { useStore } from './store';
 import './lib/streamingBridge';
 import { Chrome } from './components/Chrome';
@@ -14,14 +15,8 @@ import { cancelProcessing } from './lib/processing';
 import { planAutoRetry, type AutoRetryState } from './lib/autoRetry';
 import { updateBatch } from './lib/db';
 
-// Dev-only, non-secret prefill (endpoint only). Secrets are never prefilled.
-const devEndpoint = import.meta.env.VITE_SPARCD_S3_ENDPOINT as string | undefined;
-
-// The remembered non-secret fields (endpoint/access key/region/etc.) from a
-// prior connection, if any — the secret itself is never persisted, so the
-// user always retypes it. Read once; a dev endpoint override wins if set.
-const persistedConnection = loadPersistedConnection();
-const connectPrefill = { ...persistedConnection, ...(devEndpoint ? { endpoint: devEndpoint } : {}) };
+// Storage is the gate on this same origin; the login name and password are the access key and secret.
+const connectPrefill = { endpoint: location.origin };
 
 export function App() {
   const s3Config = useStore((s) => s.s3Config);
@@ -30,6 +25,7 @@ export function App() {
   // Restore once on mount; direct and shared connections start their own lookup.
   useEffect(() => {
     ensureUploaderIdentity();
+    void resumeSession();
   }, [ensureUploaderIdentity]);
   const loginDeferred = useStore((s) => s.loginDeferred);
   const setLoginDeferred = useStore((s) => s.setLoginDeferred);
@@ -158,14 +154,14 @@ export function App() {
   if (!s3Config && !loginDeferred) {
     return (
       <>
-      {import.meta.env.PROD && <OfflineApps />}
-      <AutomaticSpeciesCache />
+      {/* Offline apps, the species cache and "Login later" belong to the old storage; hidden here. */}
+      {SHOW_OLD_STORAGE_FEATURES && <AutomaticSpeciesCache />}
       <Connection
         toolName="Uploader"
         initialConfig={connectPrefill}
         onConnect={connect}
-        onTestConnection={(config, signal) => testConnection(config, { signal })}
-        onSkip={() => setLoginDeferred(true)}
+        onTestConnection={(config) => checkSignIn(config)}
+        onSkip={SHOW_OLD_STORAGE_FEATURES ? () => setLoginDeferred(true) : undefined}
       />
       </>
     );
@@ -174,10 +170,9 @@ export function App() {
   return (
     <Chrome uploadState={uploadStateOf(activeSnap)}>
       {resumeWarning && <WorkflowNotice title="Resolve species before uploading" onClose={() => setResumeWarning(null)}><p>{resumeWarning}</p></WorkflowNotice>}
-      {import.meta.env.PROD && <OfflineApps />}
-      <AutomaticSpeciesCache />
+      {SHOW_OLD_STORAGE_FEATURES && <AutomaticSpeciesCache />}
       {section === 'new' && <NewUpload />}
-      {section === 'history' && <History />}
+      {SHOW_OLD_STORAGE_FEATURES && section === 'history' && <History />}
       {section === 'settings' && <Settings />}
     </Chrome>
   );

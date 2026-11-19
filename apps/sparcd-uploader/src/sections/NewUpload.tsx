@@ -11,8 +11,9 @@ import type { Severity } from '../lib/validation';
 import { StepIndicator } from '../components/StepIndicator';
 import { DropZone } from '../components/DropZone';
 import { FileList } from '../components/FileList';
-import { Assign } from './Assign';
-import { Upload } from './Upload';
+import { NextAssign } from './NextAssign';
+import { NextUpload } from './NextUpload';
+import { SHOW_OLD_STORAGE_FEATURES } from '../next/features';
 import { canPickFolder, formatBytes, supportsDirectoryHandle } from '../lib/scanFiles';
 import { summarize } from '../lib/validation';
 import { ensureProcessing } from '../lib/processing';
@@ -158,7 +159,7 @@ export function NewUpload() {
     <div className="px-6 py-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <StepIndicator current={step} />
-        {step === 'inspect' && (
+        {SHOW_OLD_STORAGE_FEATURES && step === 'inspect' && (
           <button
             disabled={!summary.ready || tagging}
             onClick={() => {
@@ -201,17 +202,17 @@ export function NewUpload() {
         )}
       </div>
 
-      {step === 'drop' && !flip && <ResumeNotice />}
+      {SHOW_OLD_STORAGE_FEATURES && step === 'drop' && !flip && <ResumeNotice />}
       {notice && <WorkflowNotice title={notice.title} onClose={() => setNotice(null)}><p>{notice.message}</p></WorkflowNotice>}
-      <PreparationSaveStatus />
+      {SHOW_OLD_STORAGE_FEATURES && <PreparationSaveStatus />}
       {tagError && <p role="alert" className="text-warn">{tagError}</p>}
 
       {step === 'drop' &&
-        (flip ? (
+        (SHOW_OLD_STORAGE_FEATURES && flip ? (
           <FlipReturnPanel state={flip} />
         ) : (
           <>
-            <PreparationRecovery />
+            {SHOW_OLD_STORAGE_FEATURES && <PreparationRecovery />}
             <DropZone />
           </>
         ))}
@@ -296,7 +297,7 @@ export function NewUpload() {
               </button>
               <button
                 disabled={!summary.ready}
-                onClick={() => online ? setStep('assign') : setNotice({title:'Connect before Describe',message:'Connect online before Describe so locations and collections can be loaded. Your files and tags are saved on this device.'})}
+                onClick={() => online ? setStep('assign') : setNotice({title:'Connect before Describe',message:'Connect online before Describe so locations can be loaded.'})}
                 title={summary.ready ? 'Continue to Describe' : 'Resolve files that need attention first'}
                 className={`min-h-[44px] sm:min-h-0 bg-ink text-paper border border-ink px-3.5 py-2.5 sm:py-1.5 text-[14px] font-body font-[600] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
                   summary.ready
@@ -332,9 +333,9 @@ export function NewUpload() {
         </div>
       )}
 
-      {step === 'assign' && <Assign />}
+      {step === 'assign' && <NextAssign />}
 
-      {step === 'upload' && <Upload />}
+      {step === 'upload' && <NextUpload />}
     </div>
   );
 }
