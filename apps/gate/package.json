@@ -1,0 +1,23 @@
+{
+  "name": "gate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/unit.test.mjs",
+    "test:e2e": "node --test test/e2e.test.mjs",
+    "local:up": "node local/up.mjs",
+    "local:down": "node local/down.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "aws4fetch": "1.0.20"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1058.0",
+    "@aws-sdk/s3-request-presigner": "^3.1058.0"
+  }
+}

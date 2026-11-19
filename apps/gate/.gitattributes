@@ -1,0 +1,4 @@
+# Uploaded and deployed byte for byte: CSVs must be LF, and so must anything a
+# Linux server runs.
+* text=auto eol=lf
+*.exe binary
