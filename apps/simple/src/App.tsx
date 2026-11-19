@@ -78,7 +78,9 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  useEffect(() => window.scrollTo(0, 0), [route]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [route]);
 
   if (!start) return <Message>Loading…</Message>;
   if ('failed' in start)

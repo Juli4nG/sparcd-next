@@ -5,12 +5,12 @@ const day = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', 
 /** "28 September 2026" from "2026-09-28". */
 export const longDate = (iso: string) => day.format(new Date(`${iso}T00:00:00Z`));
 
-/** The mountain range: the first of the deploymentGroups that isn't a share marker. */
+/** The mountain range: the first of the deploymentGroups that isn't a share marker, without its "area:" label. */
 export const rangeOf = (groups: string | undefined) =>
-  (groups ?? '')
+  ((groups ?? '')
     .split('|')
     .map((g) => g.trim())
-    .find((g) => g && !g.startsWith('share:')) ?? '';
+    .find((g) => g && !g.startsWith('share:')) ?? '').replace(/^[a-z]+:\s*/i, '');
 
 /** Liz's card description: "Mountain range – Site name – Site ID – photo count – date". */
 export function cardLine(parts: { range: string; name: string; id: string; photos?: number; date: string }): string {

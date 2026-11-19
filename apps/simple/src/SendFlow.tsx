@@ -51,7 +51,9 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
       () => setSettings('failed'),
     );
   }, [session]);
-  useEffect(() => onSending(step === 'send'), [step, onSending]);
+  useEffect(() => {
+    onSending(step === 'send');
+  }, [step, onSending]);
   useEffect(() => () => onSending(false), [onSending]);
 
   if (!settings) return <Message>Loading…</Message>;
