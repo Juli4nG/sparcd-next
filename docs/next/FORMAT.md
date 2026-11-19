@@ -76,7 +76,8 @@ juniper-draw,Juniper Draw,31.84213,-110.61942,area:East Range
 ```
 
 - `observationType` is optional and defaults to `animal`. `Homo sapiens` is
-  `human` and the "Unknown" entry is `unknown`.
+  `human`, the "Unknown" entry is `unknown`, and "Ghost" (a false trigger) is
+  `blank`.
 - `scientificName` is the species key. Values are trimmed.
 - `keyBinding` is one character or null. The Tagger also has its own
   standalone Shift and Control bindings (#628), which live in the Tagger, not
@@ -197,11 +198,11 @@ The Tagger writes one row per species per photo:
 - `observationLevel` is `media`.
 - `eventStart` and `eventEnd` are both the media `timestamp`.
 - `mediaID` and `deploymentID` come from the media row.
-- `observationType` comes from the species entry (`animal`, `human` or
-  `unknown`).
-- `scientificName` is filled for `animal` and `human`, and is empty for
-  `unknown`.
-- `count` is a whole number, 1 or more.
+- `observationType` comes from the species entry (`animal`, `human`,
+  `unknown` or `blank`).
+- `scientificName` is filled for `animal` and `human`, and is empty
+  otherwise.
+- `count` is a whole number, 1 or more, and is empty for `blank`.
 - `classificationMethod` is `human`, `classifiedBy` is the person code, and
   `classificationTimestamp` is the time of the edit.
 - `eventID` is empty, except when one tag is applied to a whole burst. Then
