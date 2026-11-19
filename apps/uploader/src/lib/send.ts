@@ -137,7 +137,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
 async function putPhoto(session: Session, photo: Photo, missing: string[], pool: ReturnType<typeof createPool>) {
   const keys = keysOf(photo);
   const put = (key: string, body: Blob | Uint8Array<ArrayBuffer>, sha256: string) =>
-    session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256, ifNoneMatch: true });
+    session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256 });
   const puts: Promise<unknown>[] = [];
   if (missing.includes('original')) puts.push(put(keys.original, photo.file, photo.mediaID));
   if (missing.includes('thumb') || missing.includes('view'))
