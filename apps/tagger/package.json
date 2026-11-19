@@ -13,6 +13,7 @@
     "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
+    "@sparcd/auth-ui": "workspace:*",
     "@sparcd/bucket": "workspace:*",
     "@tanstack/react-virtual": "^3.10.8",
     "fuse.js": "^7.0.0",
