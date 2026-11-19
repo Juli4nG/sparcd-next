@@ -22,3 +22,15 @@ export function formatBytes(bytes: number): string {
   }
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }
+
+/** The card's folder, as the person chose or dropped it. */
+export function folderName(card: { path: string }[]): string | undefined {
+  const first = card[0]?.path.split('/');
+  return first && first.length > 1 ? first[0] : undefined;
+}
+
+/** "Santa Rita Mountains – Cholla Flat – cholla-flat – 46 photos – November 19, 2026". */
+export function cardDescription(range: string, name: string, id: string, photos: number, date: string): string {
+  const day = new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return [range, name, id, count(photos, 'photo'), day].filter(Boolean).join(' – ');
+}

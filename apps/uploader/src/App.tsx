@@ -27,7 +27,6 @@ import { Describe, today } from './screens/Describe';
 import { Done } from './screens/Done';
 import { Send } from './screens/Send';
 import { GateSignIn } from './ui/GateSignIn';
-import { StatePill, type UploadState } from './ui/StatePill';
 import { StepIndicator, type WizardStep } from './ui/StepIndicator';
 
 type Step = 'card' | 'describe' | 'send' | 'done';
@@ -73,7 +72,6 @@ export function App() {
   const [date, setDate] = useState(today);
   const [card, setCard] = useState<CardFile[]>([]);
   const [outcome, setOutcome] = useState<Outcome>();
-  const [failed, setFailed] = useState(false);
   const [theme, toggleTheme] = useTheme();
 
   useEffect(() => {
@@ -123,7 +121,6 @@ export function App() {
   if (session === null) return <GateSignIn config={config} toolName="Uploader" onSignedIn={setSession} />;
 
   const sending = section === 'new' && step === 'send';
-  const uploadState: UploadState = sending ? (failed ? 'failed' : 'uploading') : step === 'done' ? 'complete' : 'ready';
 
   let body: ReactNode;
   if (!settings) body = <p className="font-body text-[14px] text-inkSoft">Loading…</p>;
@@ -137,7 +134,7 @@ export function App() {
         site={site}
         date={date}
         onBack={() => setStep('card')}
-        onNext={(s, d) => (setSite(s), setDate(d), setFailed(false), setStep('send'))}
+        onNext={(s, d) => (setSite(s), setDate(d), setStep('send'))}
       />
     );
   else if (step === 'send')
@@ -148,7 +145,6 @@ export function App() {
         site={site!}
         date={date}
         card={card}
-        onFailed={setFailed}
         onDone={(o) => (setOutcome(o), setStep('done'))}
         onSignIn={() => (signOut(), clearSharedConnection(), setSession(null), setStep('describe'))}
       />
@@ -199,7 +195,6 @@ export function App() {
         )}
 
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <StatePill state={uploadState} />
           <ConnectionChip identity={session.name} onDisconnect={leave} disconnectDisabled={sending} />
           <button
             onClick={toggleTheme}

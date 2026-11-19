@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { scanDrop, scanFileList, type CardFile } from '../lib/scan';
-import { formatBytes, number } from '../lib/words';
+import { folderName, formatBytes, number } from '../lib/words';
 import { backButton, primaryButton } from '../ui/fn';
 
 type Props = { card: CardFile[]; onCard: (c: CardFile[]) => void; onNext: () => void };
@@ -39,11 +39,16 @@ export function ChooseCard({ card, onCard, onNext }: Props) {
     return (
       <div className="max-w-2xl mx-auto space-y-3">
         <p className="font-body text-[14px] text-inkSoft">
-          <span className="font-mono text-ink">{number(card.length)}</span> files ·{' '}
+          {folderName(card) && (
+            <>
+              <span className="font-mono text-ink">{folderName(card)}</span> ·{' '}
+            </>
+          )}
+          <span className="font-mono text-ink">{number(card.length)}</span> photos ·{' '}
           <span className="font-mono text-ink">{formatBytes(bytes)}</span>
         </p>
         <div className="flex justify-center gap-3">
-          <button onClick={() => onCard([])} title="Discard this batch and return to Choose" className={backButton}>
+          <button onClick={() => onCard([])} title="Choose a different folder" className={backButton}>
             Back
           </button>
           <button onClick={onNext} title="Continue to Describe" className={primaryButton}>

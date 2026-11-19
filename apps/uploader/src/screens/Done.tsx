@@ -13,15 +13,15 @@ export function Done({ outcome, site, onAnother }: { outcome: Outcome; site: Sit
         <p className="font-display text-[18px] text-ink mb-1">{kept ? 'Upload complete' : 'Upload failed'}</p>
         <p className="font-body text-[14px] text-inkSoft">
           {kept > 0 && alreadySaved === kept
-            ? `All ${count(kept, 'file')} were already published. Nothing new to send from this card.`
-            : `Published ${count(kept - alreadySaved, 'file')} to ${site.locationName}.`}
-          {kept > 0 && alreadySaved > 0 && alreadySaved < kept && ` ${number(alreadySaved)} were already published before.`}
+            ? `Already saved: all ${count(kept, 'photo')}. Nothing new to send from this card.`
+            : `Sent ${count(kept - alreadySaved, 'photo')} to ${site.locationName}.`}
+          {kept > 0 && alreadySaved > 0 && alreadySaved < kept && ` Already saved: ${number(alreadySaved)}.`}
         </p>
       </div>
       {leftOut.length > 0 && (
         <div className="border border-warn/40 bg-paper px-3 py-2.5 space-y-1">
           <p className="font-body text-[13px] text-warn">
-            {count(leftOut.length, 'file')} could not be read and {leftOut.length === 1 ? 'was' : 'were'} left out:
+            {count(leftOut.length, 'photo')} could not be read and {leftOut.length === 1 ? 'was' : 'were'} left out:
           </p>
           <ul className="font-mono text-[11px] text-inkSoft max-h-32 overflow-auto">
             {leftOut.map((name, i) => (
@@ -32,7 +32,7 @@ export function Done({ outcome, site, onAnother }: { outcome: Outcome; site: Sit
           </ul>
         </div>
       )}
-      {!kept && <Note tone="warn" message="No files could be published." />}
+      {!kept && <Note tone="warn" message="No photos could be sent." />}
       <div className="flex justify-center gap-3">
         <button onClick={onAnother} className={backButton}>
           New upload

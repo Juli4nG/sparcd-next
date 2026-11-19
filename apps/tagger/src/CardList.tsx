@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { createShare, readPackage, type Deployment, type Session } from '@sparcd/bucket';
 import { cardSummaries, loadSettings, type CardSummary } from './data/card';
 import { shareLink, sharedSummaries, type SharedSummary } from './data/share';
-import { cardTitle } from './dates';
+import { cardDescription } from './dates';
 import { ShareDialog } from './share/ShareDialog';
 import { SharedList } from './share/SharedList';
 
@@ -42,9 +42,9 @@ export function CardList({ session }: { session: Session }) {
             {cards.map((c) => (
               <li key={c.deployment.deploymentID} data-testid="card-row" className="border border-ruleSoft bg-panel px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-body text-[14px] font-[600] text-ink truncate">{cardTitle(c.deployment)}</h2>
+                  <h2 className="font-body text-[14px] font-[600] text-ink [overflow-wrap:anywhere]">{cardDescription(c.deployment, c.photos)}</h2>
                   <p className="font-body text-[12px] text-inkSoft">
-                    {c.photos.toLocaleString()} photos · {c.tagged.toLocaleString()} tagged · {c.untagged.toLocaleString()} not tagged yet
+                    {c.tagged.toLocaleString()} tagged · {c.untagged.toLocaleString()} not tagged yet
                   </p>
                   <div aria-hidden className="mt-2 h-1.5 bg-paperHover border border-ruleSoft overflow-hidden max-w-[360px]">
                     <div className="h-full bg-ok" style={{ width: `${c.photos ? (c.tagged / c.photos) * 100 : 0}%` }} />
