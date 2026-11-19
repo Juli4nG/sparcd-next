@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { S3Error, deploymentId, type Lab, type Session, type Site } from '@sparcd/bucket';
 import type { CardFile } from '../lib/scan';
 import { PhotoError, sendCard, type Outcome, type Progress } from '../lib/send';
-import { number, timeLeft } from '../lib/words';
+import { formatBytes, number, timeLeft } from '../lib/words';
+import { primaryButton, sectionLabel } from '../ui/fn';
+import { Note } from '../ui/Note';
 import type { ReadResult } from '../workers/photo.worker';
 
 type Props = {
@@ -12,6 +14,7 @@ type Props = {
   date: string;
   card: CardFile[];
   onDone: (o: Outcome) => void;
+  onFailed: (failed: boolean) => void;
   onSignIn: () => void;
 };
 
@@ -66,7 +69,7 @@ function useLeaveWarning(active: boolean) {
   }, [active]);
 }
 
-export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props) {
+export function Send({ session, lab, site, date, card, onDone, onFailed, onSignIn }: Props) {
   const [progress, setProgress] = useState<Progress>();
   const [error, setError] = useState<Problem>();
   const [attempt, setAttempt] = useState(0);
@@ -79,6 +82,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
   useEffect(() => {
     const stop = new AbortController();
     setError(undefined);
+    onFailed(false);
     sendCard({
       session,
       lab,
@@ -98,6 +102,7 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
         if (stop.signal.aborted) return;
         console.error(err);
         setError(explain(err));
+        onFailed(true);
       },
     );
     return () => stop.abort();
@@ -118,37 +123,75 @@ export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props
     if (progress.done - base >= 3 && elapsed > 3000) eta = timeLeft((progress.total - progress.done) / rate);
   }
 
+  const pct = total ? (done / total) * 100 : 0;
+  const bytes = card.reduce((n, c) => n + c.file.size, 0);
+
   return (
-    <>
-      <h1>{progress?.phase === 'sending' ? 'Sending photos' : 'Getting photos ready'}</h1>
-      <progress className="bar" max={total} value={done} />
-      <p className="count">
-        {number(done)} of {number(total)}
-      </p>
-      {error ? (
-        <>
-          <p className="error" role="alert">
-            {error.message}
-          </p>
-          <div className="actions">
-            <span />
-            {error.signIn ? (
-              <button className="primary" onClick={onSignIn}>
-                Sign in again
-              </button>
-            ) : (
-              <button className="primary" onClick={() => setAttempt((a) => a + 1)}>
-                Try again
-              </button>
-            )}
+    <div className="max-w-2xl mx-auto space-y-7">
+      <section className="space-y-3">
+        <h2 className={sectionLabel}>Upload</h2>
+        <p className="font-body text-[13px] text-inkSoft">
+          {number(card.length)} file{card.length === 1 ? '' : 's'} ready · {formatBytes(bytes)}
+        </p>
+        <dl className="space-y-1.5 font-body text-[13px]">
+          <div className="flex items-baseline gap-3">
+            <dt className="text-inkSoft w-28 shrink-0">Location</dt>
+            <dd className="min-w-0">
+              <span className="block break-words text-ink">{site.locationName}</span>
+              <span className="block break-all font-mono text-[12px] text-inkMute">{site.locationID}</span>
+            </dd>
           </div>
-        </>
-      ) : (
-        <>
-          <p className="quiet">{eta}</p>
-          <p className="quiet">Keep this page open until it’s done.</p>
-        </>
-      )}
-    </>
+          <div className="flex items-baseline gap-3">
+            <dt className="text-inkSoft w-28 shrink-0">Date collected</dt>
+            <dd className="text-ink min-w-0">{date}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="font-body text-[13px] text-inkSoft">
+            <span className="font-mono text-ink uppercase tracking-[0.12em] text-[11px]">
+              {error ? 'error' : progress?.phase === 'sending' ? 'uploading' : 'preparing'}
+            </span>
+            {' · '}
+            <span className="font-mono text-ok">{number(done)}</span> done
+          </p>
+          <p className="shrink-0 font-mono text-[12px] text-inkSoft">
+            {number(done)} / {number(total)}
+          </p>
+        </div>
+        <div
+          className="h-2 bg-paperHover border border-ruleSoft overflow-hidden"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={done}
+        >
+          <span className={`block h-full ${error ? 'bg-warn' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
+        </div>
+        {error ? (
+          <>
+            <Note tone="warn" message={error.message} />
+            <div className="flex justify-end">
+              {error.signIn ? (
+                <button className={primaryButton} onClick={onSignIn}>
+                  Sign in again
+                </button>
+              ) : (
+                <button className={primaryButton} onClick={() => setAttempt((a) => a + 1)}>
+                  Try again
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="font-mono text-[12px] text-inkSoft">{eta}</p>
+            <Note message="Keep this page open until it’s done." />
+          </>
+        )}
+      </section>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { readTable, type Session, type Site } from '@sparcd/bucket';
-import { count } from '../lib/words';
+import { number } from '../lib/words';
+import { Note } from '../ui/Note';
 
 type Card = { deploymentID: string; site: string; date: string; photos: number };
 
@@ -23,46 +24,61 @@ async function loadCards(session: Session, sites: Site[]): Promise<Card[]> {
 const longDate = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-export function CardsSent({ session, sites, onBack }: { session: Session; sites: Site[]; onBack: () => void }) {
+export function CardsSent({ session, sites }: { session: Session; sites: Site[] }) {
   const [cards, setCards] = useState<Card[]>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     loadCards(session, sites).then(setCards, () =>
-      setError("Your cards couldn't be loaded. Check your internet and try again."),
+      setError("Your uploads couldn't be loaded. Check your internet and try again."),
     );
   }, [session, sites]);
 
-  return (
-    <>
-      <h1>Cards sent</h1>
-      {error && <p className="error">{error}</p>}
-      {!cards && !error && <p className="quiet">Loading…</p>}
-      {cards && !cards.length && <p className="quiet">You haven’t sent any cards yet.</p>}
-      {cards && cards.length > 0 && (
-        <table className="cards">
-          <thead>
-            <tr>
-              <th>Site</th>
-              <th>Card out</th>
-              <th>Photos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cards.map((c) => (
-              <tr key={c.deploymentID}>
-                <td>{c.site}</td>
-                <td>{longDate(c.date)}</td>
-                <td>{count(c.photos, 'photo')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <div className="actions">
-        <button onClick={onBack}>Back</button>
-        <span />
+  if (error)
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Note tone="warn" message={error} />
       </div>
-    </>
+    );
+  if (!cards)
+    return (
+      <div className="max-w-2xl mx-auto">
+        <p className="font-body text-[14px] text-inkSoft">Loading sessions…</p>
+      </div>
+    );
+  if (!cards.length)
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="border border-ruleSoft bg-panel px-6 py-12 text-center">
+          <p className="font-display text-[18px] text-ink mb-1">No uploads yet</p>
+          <p className="font-body text-[14px] text-inkSoft">Cards you upload are listed here.</p>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <ul className="space-y-3">
+        {cards.map((c) => (
+          <li key={c.deploymentID} className="border border-ruleSoft bg-panel px-4 py-3 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[13px] text-ink truncate" title={c.deploymentID}>
+                  {c.deploymentID}
+                </p>
+                <p className="font-body text-[12px] text-inkSoft [overflow-wrap:anywhere]">{c.site}</p>
+                <p className="font-body text-[12px] text-inkSoft">{longDate(c.date)}</p>
+              </div>
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] px-1.5 py-0.5 border border-ok/50 text-ok">
+                complete
+              </span>
+            </div>
+            <p className="font-body text-[12px] text-inkSoft">
+              <span className="font-mono text-ink">{number(c.photos)}</span> files
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

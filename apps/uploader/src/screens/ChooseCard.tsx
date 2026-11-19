@@ -1,14 +1,15 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { scanDrop, scanFileList, type CardFile } from '../lib/scan';
-import { count } from '../lib/words';
+import { formatBytes, number } from '../lib/words';
+import { backButton, primaryButton } from '../ui/fn';
 
-type Props = { card: CardFile[]; onCard: (c: CardFile[]) => void; onBack: () => void; onNext: () => void };
+type Props = { card: CardFile[]; onCard: (c: CardFile[]) => void; onNext: () => void };
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
-export function ChooseCard({ card, onCard, onBack, onNext }: Props) {
+export function ChooseCard({ card, onCard, onNext }: Props) {
   const [state, setState] = useState<'idle' | 'looking' | 'empty' | 'failed'>('idle');
-  const [over, setOver] = useState(false);
+  const [hover, setHover] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const latest = useRef(0);
 
@@ -29,47 +30,96 @@ export function ChooseCard({ card, onCard, onBack, onNext }: Props) {
 
   const drop = (e: DragEvent) => {
     e.preventDefault();
-    setOver(false);
+    setHover(false);
     void take(scanDrop(e.dataTransfer.items));
   };
 
+  if (state === 'idle' && card.length > 0) {
+    const bytes = card.reduce((n, c) => n + c.file.size, 0);
+    return (
+      <div className="max-w-2xl mx-auto space-y-3">
+        <p className="font-body text-[14px] text-inkSoft">
+          <span className="font-mono text-ink">{number(card.length)}</span> files ·{' '}
+          <span className="font-mono text-ink">{formatBytes(bytes)}</span>
+        </p>
+        <div className="flex justify-center gap-3">
+          <button onClick={() => onCard([])} title="Discard this batch and return to Choose" className={backButton}>
+            Back
+          </button>
+          <button onClick={onNext} title="Continue to Describe" className={primaryButton}>
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const noneFound = state === 'empty' || state === 'failed';
   return (
-    <>
-      <h1>Choose the card</h1>
+    <div className="max-w-2xl mx-auto">
       <div
-        className={over ? 'dropzone over' : 'dropzone'}
-        onDragOver={(e) => (e.preventDefault(), setOver(true))}
-        onDragLeave={() => setOver(false)}
+        role="button"
+        tabIndex={0}
+        aria-label="Choose a folder of photos to upload"
+        onClick={() => picker.current!.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            picker.current!.click();
+          }
+        }}
+        onDragOver={(e) => (e.preventDefault(), setHover(true))}
+        onDragLeave={() => setHover(false)}
         onDrop={drop}
+        className={`border ${
+          hover ? 'border-accent bg-accentSoft' : noneFound ? 'border-warn bg-panel' : 'border-rule bg-panel'
+        } px-8 py-16 text-center cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2`}
       >
-        <button className="big" onClick={() => picker.current!.click()}>
-          Choose the card
-        </button>
-        <input
-          ref={picker}
-          type="file"
-          hidden
-          // @ts-expect-error webkitdirectory is not in React's input attributes
-          webkitdirectory=""
-          onChange={(e) => {
-            if (e.target.files) void take(scanFileList(e.target.files));
-            e.target.value = '';
-          }}
-        />
-        <p className="quiet">or drag the card’s folder here</p>
+        {state === 'looking' ? (
+          <p className="font-body text-[15px] text-inkSoft">Scanning folder…</p>
+        ) : noneFound ? (
+          <>
+            <p className="font-display text-[20px] text-warn mb-1">
+              {state === 'failed' ? 'That folder couldn’t be read' : 'No images in that folder'}
+            </p>
+            <p className="font-body text-[14px] text-inkSoft mb-5">
+              {state === 'failed' ? (
+                'Check the card is still plugged in, then choose the folder again.'
+              ) : (
+                <>
+                  The folder was read but held no <span className="font-mono">.jpg</span>/
+                  <span className="font-mono">.jpeg</span> files. This tool uploads JPEG — choose the card’s folder.
+                </>
+              )}
+            </p>
+            <span className="inline-block bg-ink text-paper border border-ink px-4 py-2 text-[14px] font-body font-[600]">
+              Choose another folder
+            </span>
+          </>
+        ) : (
+          <>
+            <p className="font-display text-[20px] text-ink mb-1">Drop a folder to upload</p>
+            <p className="font-body text-[14px] text-inkSoft mb-5">
+              or click Choose folder to browse. JPEG files in the folder and its sub-folders are included.
+            </p>
+            <span className="inline-block min-h-11 md:min-h-0 bg-ink text-paper border border-ink px-4 py-2 text-[14px] font-body font-[600]">
+              Choose folder
+            </span>
+          </>
+        )}
       </div>
-      <p className="status" aria-live="polite">
-        {state === 'looking' && 'Looking for photos…'}
-        {state === 'empty' && 'No photos found there. Choose the card’s folder.'}
-        {state === 'failed' && 'We couldn’t read that card. Check it’s plugged in, then choose it again.'}
-        {state === 'idle' && card.length > 0 && `${count(card.length, 'photo')} found`}
-      </p>
-      <div className="actions">
-        <button onClick={onBack}>Back</button>
-        <button className="primary" disabled={!card.length || state === 'looking'} onClick={onNext}>
-          Send photos
-        </button>
-      </div>
-    </>
+      <input
+        ref={picker}
+        type="file"
+        aria-label="New upload folder"
+        hidden
+        // @ts-expect-error webkitdirectory is not in React's input attributes
+        webkitdirectory=""
+        onChange={(e) => {
+          if (e.target.files) void take(scanFileList(e.target.files));
+          e.target.value = '';
+        }}
+      />
+    </div>
   );
 }
