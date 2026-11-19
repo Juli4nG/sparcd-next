@@ -1,0 +1,184 @@
+import { AutomaticSpeciesCache } from './components/AutomaticSpeciesCache';
+import { useEffect, useRef, useState } from 'react';
+import { WorkflowNotice } from './components/WorkflowNotice';
+import { Connection, OfflineApps, loadPersistedConnection } from '@sparcd/auth-ui';
+import { testConnection } from '@sparcd/s3-safe';
+import { useStore } from './store';
+import './lib/streamingBridge';
+import { Chrome } from './components/Chrome';
+import { NewUpload } from './sections/NewUpload';
+import { History } from './sections/History';
+import { Settings } from './sections/Settings';
+import { uploadStateOf } from './lib/uploadState';
+import { cancelProcessing } from './lib/processing';
+import { planAutoRetry, type AutoRetryState } from './lib/autoRetry';
+import { updateBatch } from './lib/db';
+
+// Dev-only, non-secret prefill (endpoint only). Secrets are never prefilled.
+const devEndpoint = import.meta.env.VITE_SPARCD_S3_ENDPOINT as string | undefined;
+
+// The remembered non-secret fields (endpoint/access key/region/etc.) from a
+// prior connection, if any — the secret itself is never persisted, so the
+// user always retypes it. Read once; a dev endpoint override wins if set.
+const persistedConnection = loadPersistedConnection();
+const connectPrefill = { ...persistedConnection, ...(devEndpoint ? { endpoint: devEndpoint } : {}) };
+
+export function App() {
+  const s3Config = useStore((s) => s.s3Config);
+  const connectionId = useStore((s) => s.connectionId);
+  const ensureUploaderIdentity = useStore((s) => s.ensureUploaderIdentity);
+  // Restore once on mount; direct and shared connections start their own lookup.
+  useEffect(() => {
+    ensureUploaderIdentity();
+  }, [ensureUploaderIdentity]);
+  const loginDeferred = useStore((s) => s.loginDeferred);
+  const setLoginDeferred = useStore((s) => s.setLoginDeferred);
+  const section = useStore((s) => s.section);
+  const connect = useStore((s) => s.connect);
+  const theme = useStore((s) => s.theme);
+  const activeSnap = useStore((s) => s.activeSnap);
+  const runGeneration = useStore(s => s.activeRunGeneration);
+  const [resumeWarning, setResumeWarning] = useState<string | null>(null);
+  useEffect(() => {
+    setResumeWarning(activeSnap?.speciesWarning ?? null);
+  }, [activeSnap?.sessionId, activeSnap?.speciesWarning, runGeneration]);
+  const retryPartialRun = useStore((s) => s.retryPartialRun);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
+  const previousConnection = useRef(s3Config);
+  useEffect(() => {
+    // Initial login can happen while an offline batch is still being inspected.
+    // Only a session being torn down/replaced invalidates that local work.
+    if (previousConnection.current || !s3Config) cancelProcessing();
+    previousConnection.current = s3Config;
+  }, [connectionId, s3Config]);
+
+  // Warn on tab close/reload while any real run (fresh or resume) is in flight.
+  // Lives here rather than in the section components so it covers History resume
+  // runs too — both sections write into the same store activeSnap.
+  const activelyRunning =
+    activeSnap?.phase === 'preparing' ||
+    activeSnap?.phase === 'blobs' ||
+    activeSnap?.phase === 'metadata';
+  const runningForReal = activelyRunning && !activeSnap?.dryRun;
+  useEffect(() => {
+    if (!runningForReal) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [runningForReal]);
+
+  // Self-heal after an interruption the user might not notice. Lives here
+  // rather than in Upload so it covers runs started from History and still
+  // active after the user navigates away from the Upload step. "Wakes up" on
+  // either visibilitychange or the browser `online` event, whichever comes
+  // first; both conditions are re-checked at the moment either fires.
+  useEffect(() => {
+    const tryAutoResume = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        void retryPartialRun();
+      }
+    };
+    document.addEventListener('visibilitychange', tryAutoResume);
+    window.addEventListener('online', tryAutoResume);
+    return () => {
+      document.removeEventListener('visibilitychange', tryAutoResume);
+      window.removeEventListener('online', tryAutoResume);
+    };
+  }, [retryPartialRun]);
+
+  // A connection can die while the browser still reports itself online, so
+  // no `online` event will ever come. A run that stopped only for want of an
+  // answer is retried on a backoff timer instead, until too many retries in
+  // a row get nothing through; History then says storage can't be reached.
+  const autoRetryPhase = activeSnap?.autoRetry ? activeSnap.phase : null;
+  const autoRetry = useRef<AutoRetryState>({ sessionId: null, fruitless: 0 });
+  useEffect(() => {
+    const snap = useStore.getState().activeSnap;
+    if (autoRetryPhase !== 'partial' || !snap) return;
+    const plan = planAutoRetry(autoRetry.current, snap);
+    autoRetry.current = plan.state;
+    void updateBatch(snap.sessionId, { storageUnreachable: plan.delay === null });
+    if (plan.delay === null) return;
+    const timer = setTimeout(() => {
+      if (navigator.onLine !== false) void retryPartialRun();
+    }, plan.delay);
+    return () => clearTimeout(timer);
+  }, [autoRetryPhase, retryPartialRun]);
+
+  // Hold a screen wake lock while any run is in flight (including dry runs and
+  // the preparing phase). Lives here (not in Upload) so it survives the user
+  // navigating away mid-upload. The lock is
+  // auto-released by the browser on tab hide, so it's re-acquired on regaining
+  // visibility. Generation counter guards against orphaned sentinels when two
+  // visibility events fire before either acquire() resolves.
+  useEffect(() => {
+    if (!activelyRunning || !('wakeLock' in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    let gen = 0;
+
+    const acquire = () => {
+      const myGen = ++gen;
+      navigator.wakeLock
+        .request('screen')
+        .then((l) => {
+          if (cancelled || myGen !== gen) {
+            void l.release();
+          } else {
+            lock = l;
+          }
+        })
+        .catch(() => {});
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      void lock?.release();
+      lock = null;
+      acquire();
+    };
+
+    acquire();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      void lock?.release();
+    };
+  }, [activelyRunning]);
+
+  if (!s3Config && !loginDeferred) {
+    return (
+      <>
+      {import.meta.env.PROD && <OfflineApps />}
+      <AutomaticSpeciesCache />
+      <Connection
+        toolName="Uploader"
+        initialConfig={connectPrefill}
+        onConnect={connect}
+        onTestConnection={(config, signal) => testConnection(config, { signal })}
+        onSkip={() => setLoginDeferred(true)}
+      />
+      </>
+    );
+  }
+
+  return (
+    <Chrome uploadState={uploadStateOf(activeSnap)}>
+      {resumeWarning && <WorkflowNotice title="Resolve species before uploading" onClose={() => setResumeWarning(null)}><p>{resumeWarning}</p></WorkflowNotice>}
+      {import.meta.env.PROD && <OfflineApps />}
+      <AutomaticSpeciesCache />
+      {section === 'new' && <NewUpload />}
+      {section === 'history' && <History />}
+      {section === 'settings' && <Settings />}
+    </Chrome>
+  );
+}

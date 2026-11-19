@@ -1,0 +1,166 @@
+# DRAFT — for review, not yet agreed. Generated 2026-09-05 from apps/sparcd-uploader (src/sections/Assign.tsx, src/components/CaptureTimeEditor.tsx, src/lib/exifTime.ts, src/lib/estimateCaptureTime.ts, src/lib/spreadCaptureTimes.ts, src/lib/coords.ts, src/lib/bundle.ts, test/exifTime.test.ts, test/estimateCaptureTime.test.ts, test/bundle.test.ts).
+
+@unmapped
+Feature: Establish the true capture time of every file
+
+  """
+  As-built flow: a camera writes a wall-clock time with no timezone, so the same
+  written time means a different instant depending on where the camera stands.
+  The uploader records which timezone to read those times in, and defaults it
+  from the chosen camera location. When a camera wrote no time at all, the
+  uploader estimates one from the files around it rather than asking for it —
+  and marks the upload, and each such file, as carrying a known timestamp issue.
+  """
+
+  Background:
+    Given a scanned batch has reached the Describe step
+
+  @unmapped
+  Scenario: The upload timezone starts as this machine's timezone
+    Given no deployment has been chosen yet
+    Then the upload timezone is the timezone of the machine doing the upload
+
+  @unmapped
+  Scenario: Choosing a camera location sets the timezone to that location's timezone
+    When a deployment location is chosen
+    Then the upload timezone changes to the timezone the location's coordinates fall in
+    # Derived from the location's latitude and longitude; approximate near a
+    # timezone border.
+
+  @unmapped
+  Scenario: A timezone chosen by hand is not overwritten
+    Given a deployment location has been chosen
+    When the user then picks a different timezone
+    Then that choice stands for as long as the same location stays selected
+
+  @unmapped
+  Scenario: Any timezone can be selected, including one the machine does not list
+    Then the timezone list offers every timezone the browser knows
+    And the currently chosen timezone is always offered even if it is not in that list
+
+  @unmapped
+  Scenario: Camera times are stored as the instant they represent in the chosen timezone
+    Given a file whose camera wrote a wall-clock time
+    When the batch is published
+    Then the stored capture time is that wall-clock read in the upload timezone
+    And daylight-saving time in force on that date is accounted for
+    And the stored time does not depend on the timezone of the machine uploading
+
+  @unmapped
+  Scenario: A file with no camera time is given the time between its neighbours
+    Given some examined files carry no camera capture time
+    Then each of them already shows an estimated time, marked as an estimate
+    And a file between two timestamped files sits midway between them
+
+  @unmapped
+  Scenario: Descending camera-time neighbours are still interpolated
+    Given filename-order neighbours have descending camera times with missing files between them
+    Then the missing files show descending interpolated estimates
+    When one descending estimate is overridden by hand
+    Then clearing the override returns it to its descending estimate
+
+  @unmapped
+  Scenario: The first and last files are placed ten minutes past their only neighbour
+    Given the batch begins and ends with a file carrying no camera time
+    Then the first file sits ten minutes before the earliest camera time
+    And the last file sits ten minutes after the latest camera time
+
+  @unmapped
+  Scenario: A batch with no camera time at all falls back to file modified times
+    Given no file in the batch carries a camera capture time
+    Then every file takes the time its file was last modified
+    And the panel says so, and offers to spread the times instead
+
+  @unmapped
+  Scenario: An estimate can be overridden by hand and cleared back
+    Given some examined files carry no camera capture time
+    When a time is typed over one file's estimate
+    Then that file shows the typed time as entered by hand
+    And clearing it returns the file to its estimate
+
+  @unmapped
+  Scenario: A manual override is entered in 24-hour text, not a locale-dependent picker
+    Given some examined files carry no camera capture time
+    When a time with a space separator is typed over one file's estimate
+    Then that file shows the typed time as entered by hand
+    # #456: the override field is a plain 24-hour text field, not a native
+    # `datetime-local` picker, so its format never depends on the machine's
+    # locale (which a US machine would otherwise show as 12-hour with AM/PM).
+
+  @unmapped
+  Scenario: A selection can be spread from a start time
+    Given some examined files carry no camera capture time
+    When a start time and a spacing are applied to the selection
+    Then the files land at that start time, one spacing apart, in filename order
+    And each of them is marked as spread
+
+  @unmapped
+  Scenario: An impossible date is refused as an override
+    When a date that does not exist is entered, such as 31 February
+    Then the file keeps the estimate it already had
+
+  @unmapped
+  Scenario: Every time the camera did not write is marked as a known issue
+    Given some examined files carry no camera capture time
+    When the batch is published
+    Then the deployment is flagged as having a timestamp issue
+    And each file whose time the camera did not write carries a marker saying where it came from
+    And files the camera did time carry no marker
+
+  Scenario: EXIF ModifyDate is warned and can be overridden
+    Given a file whose only EXIF time is ModifyDate
+    Then it is shown as modified metadata that needs review
+    When that modified metadata time is overridden by hand
+    Then the modified metadata time is shown as a manual override
+
+  Scenario: An EXIF ModifyDate override travels in the uploader's Tagger hand-off
+    Given a file whose only EXIF time is ModifyDate
+    When that modified metadata time is overridden by hand
+    And the batch is returned to Inspect before local tagging
+    And species have been prepared for local tagging
+    Then the hand-off gives the Tagger the overridden time
+
+  @unmapped
+  Scenario: Upload is never blocked by a missing capture time
+    Given some examined files carry no camera capture time
+    Then the batch can be published without anyone entering a time
+
+  @unmapped
+  Scenario: Incomplete override typing preserves the saved time until valid or cleared
+    Given some examined files carry no camera capture time
+    When a time with a space separator is typed over one file's estimate
+    And the override is edited through incomplete text
+    Then the saved override remains unchanged while the edit is invalid
+    When the typed override is completed
+    Then the completed 24-hour override is saved
+    When the override text is emptied
+    Then the open override is empty and the file returns to its estimate
+
+  @unmapped
+  Scenario: Resetting an override refreshes its open field
+    Given some examined files carry no camera capture time
+    When a time with a space separator is typed over one file's estimate
+    And clearing it returns the file to its estimate
+    Then the open override is empty and the file returns to its estimate
+
+  @unmapped
+  Scenario: Applying a spread refreshes an open override field
+    Given some examined files carry no camera capture time
+    When a time with a space separator is typed over one file's estimate
+    And the override is edited through incomplete text
+    And a start time and a spacing are applied to the selection
+    Then the open override shows the newly spread time
+
+  @unmapped
+  Scenario: A same-time spread still replaces unfinished override text
+    Given some examined files carry no camera capture time
+    When a time with a space separator is typed over one file's estimate
+    And the override is edited through incomplete text
+    And a spread matching the saved override is applied
+    Then the open override returns to the saved time with spread provenance
+
+  @unmapped
+  Scenario: Spread start accepts late-hour text and disables Apply for incomplete text
+    Given some examined files carry no camera capture time
+    When a late-hour spread start is edited and applied
+    Then the spread uses the exact 24-hour start and spacing

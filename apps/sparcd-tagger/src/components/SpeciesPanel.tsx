@@ -1,0 +1,300 @@
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
+import type { Species } from '../lib/species';
+import type { AppliedTag } from '../lib/drafts';
+import { encodeSpeciesDrag, SPECIES_DRAG_TYPE } from '../lib/speciesDrag';
+import { SpeciesHelp } from './SpeciesHelp';
+
+// The species selector. Persistent, scrollable, browsable — not only a
+// type-to-filter popover — because volunteers scan to recognize a species.
+// Each row carries an example thumbnail, common + scientific name, and its
+// assigned key (a kbd badge with an assign affordance). Recent species this
+// session float to the top; that affects ordering only, never key assignment.
+
+export type SpeciesPanelProps = {
+  species: Species[];
+  displayedSpecies: Species[];
+  showHelp: boolean;
+  onHelpOpen: () => void;
+  onHelpClose: () => void;
+  speciesLoading?: boolean;
+  speciesLoadError?: boolean;
+  onRetrySpecies?: () => Promise<boolean>;
+  onApply: (tag: AppliedTag) => void; // add-only; count omitted defaults to 1
+  filter: string;
+  onFilterChange: (v: string) => void;
+  filterRef: RefObject<HTMLInputElement>;
+  bindingFor: (scientificName: string) => string | null;
+  keyConflictFor: (scientificName: string) => string | null; // why the key is dead, when another species claims it too
+  capturingFor: string | null;
+  onStartCapture: (scientificName: string) => void;
+  onClearKey: (scientificName: string) => void;
+  keysUnsaved: boolean; // the last key-settings write to localStorage failed
+  appliedSet: Set<string>; // scientificNames applied on the focused image (✓ + add-only NO-OP)
+  hasFocus: boolean; // an image is focused
+  selectionCount: number; // >0 → applying a species hits the whole selection
+  disabled: boolean; // no image focused
+  headerSlot?: ReactNode; // the compact applied-species strip, under the filter
+  onZoom?: (species: Species) => void; // open the enlarged reference image
+  selectedSpecies: string | null;
+  onSelectSpecies: (scientificName: string) => void;
+};
+
+export function SpeciesPanel(props: SpeciesPanelProps) {
+  const { species, filter } = props;
+  const [retrying, setRetrying] = useState(false);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  async function retrySpecies() {
+    if (retrying || !props.onRetrySpecies) return;
+    setRetrying(true);
+    try {
+      const recovered = await props.onRetrySpecies();
+      // Keep focus on Retry during a failed attempt; after success return to
+      // the species filter, unless the user has already moved elsewhere.
+      if (recovered && document.activeElement === retryRef.current) props.filterRef.current?.focus();
+    } finally { setRetrying(false); }
+  }
+
+  const trimmed = filter.trim();
+  const exact = species.some(
+    (s) => s.commonName.toLowerCase() === trimmed.toLowerCase() || s.scientificName.toLowerCase() === trimmed.toLowerCase(),
+  );
+
+  return (
+    <div data-testid="species-panel" className="h-full flex flex-col border-l border-rule bg-panel min-h-0">
+      {props.keysUnsaved && (
+        <div role="alert" className="px-3 py-1.5 border-b border-warn text-[12px] font-mono text-warn">
+          Couldn't save your key settings in this browser. They'll reset when you reload.
+        </div>
+      )}
+      {props.selectionCount > 1 && (
+        <div className="px-3 py-1.5 bg-mark border-b border-rule text-[12px] font-mono text-accent">
+          Applying to {props.selectionCount} selected images
+        </div>
+      )}
+      <div className="p-3 border-b border-rule space-y-3">
+        <input
+          ref={props.filterRef}
+          value={filter}
+          onChange={(e) => props.onFilterChange(e.target.value)}
+          placeholder="Filter species…  (Space)"
+          className="w-full bg-paper border border-rule px-3 py-2 text-[14px] font-body text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="Filter species"
+        />
+        {props.headerSlot}
+        {props.hasFocus && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-body tracking-[0.12em] uppercase text-inkSoft">Available species</p>
+            <button
+              type="button"
+              onClick={props.onHelpOpen}
+              className="shrink-0 min-w-11 min-h-11 md:min-w-5 md:min-h-5 grid place-items-center text-[13px] text-inkSoft hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+              title="About the species list"
+              aria-label="About the species list"
+            >
+              ⓘ
+            </button>
+          </div>
+        )}
+        {props.showHelp && <SpeciesHelp onClose={props.onHelpClose} />}
+      </div>
+
+      {(props.speciesLoadError || retrying) && (
+        <div className="px-3 py-2 border-b border-warn text-[13px] font-body space-y-2">
+          {retrying ? <p role="status">Retrying the species list…</p> : (
+            <p role="alert">{species.length ? "Couldn't refresh the species list. Your previously loaded species remain available." : "Couldn't load the species list."} Check your connection and access permissions, then retry.</p>
+          )}
+          <button ref={retryRef} type="button" aria-label="Retry loading species" aria-disabled={retrying}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
+            onClick={() => void retrySpecies()} className="min-h-11 px-3 py-2 border border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
+      {props.speciesLoading && !retrying && <p role="status" className="px-3 py-2 text-[13px] text-inkSoft">Loading species…</p>}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {props.displayedSpecies.map((s) => (
+          <Row
+            key={s.key}
+            iconUrl={s.iconUrl}
+            common={s.commonName}
+            scientific={s.scientificName}
+            badge={props.bindingFor(s.scientificName)}
+            badgeConflict={props.keyConflictFor(s.scientificName)}
+            capturing={props.capturingFor === s.scientificName}
+            applied={props.appliedSet.has(s.scientificName)}
+            selected={props.selectedSpecies === s.scientificName}
+            disabled={props.disabled}
+            onSelect={() => props.onSelectSpecies(s.scientificName)}
+            onApply={() => props.onApply({ scientificName: s.scientificName, commonName: s.commonName, count: 1 })}
+            onStartCapture={() => props.onStartCapture(s.scientificName)}
+            onClearKey={props.bindingFor(s.scientificName) ? () => props.onClearKey(s.scientificName) : undefined}
+            onZoom={props.onZoom ? () => props.onZoom!(s) : undefined}
+            dragData={{ scientificName: s.scientificName, commonName: s.commonName }}
+          />
+        ))}
+
+        {trimmed && !exact && (
+          <Row
+            chip="✛ Request"
+            common={`Tag as requested species`}
+            scientific={`“${trimmed}” → [REQUESTED_SPECIES]`}
+            disabled={props.disabled}
+            onApply={() =>
+              props.onApply({ scientificName: trimmed, commonName: '', count: 1, requestedSpecies: trimmed })
+            }
+          />
+        )}
+
+        {!props.displayedSpecies.length && !trimmed && !props.speciesLoading && !props.speciesLoadError && !retrying && (
+          <p className="p-4 text-[13px] text-inkMute font-body">No species in the vocabulary.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type RowProps = {
+  iconUrl?: string;
+  chip?: string;
+  common: string;
+  scientific: string;
+  badge?: string | null;
+  badgeConflict?: string | null;
+  capturing?: boolean;
+  applied?: boolean; // already on the focused image → ✓, clicking is a NO-OP add
+  selected?: boolean;
+  disabled: boolean;
+  onApply: () => void;
+  onSelect?: () => void;
+  onStartCapture?: () => void;
+  onClearKey?: () => void;
+  onZoom?: () => void; // present only for animal rows that have a reference image
+  dragData?: { scientificName: string; commonName: string }; // present → row is draggable
+};
+
+function Row(p: RowProps) {
+  return (
+    <div
+      className={`group relative flex items-center gap-3 px-3 py-2 border-b border-ruleSoft ${
+        p.selected ? 'bg-mark ring-2 ring-inset ring-accent' : 'hover:bg-panelHover'
+      }`}
+      draggable={!!p.dragData}
+      onDragStart={
+        p.dragData
+          ? (e) => {
+              e.dataTransfer.setData(SPECIES_DRAG_TYPE, encodeSpeciesDrag(p.dragData!));
+              e.dataTransfer.effectAllowed = 'copy';
+            }
+          : undefined
+      }
+    >
+      {/* Loupe: a sibling of the apply button (never nested — button-in-button is
+          invalid and would fire apply), overlaid over the whole thumbnail.
+          Invisible — no icon or background — so hovering anywhere on the
+          thumbnail just shows the native "Enlarge reference" tooltip instead
+          of a separate overlay control. stopPropagation keeps clicking it
+          from applying the species. */}
+      {p.iconUrl && p.onZoom && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            p.onZoom!();
+          }}
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 cursor-zoom-in focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          title="Enlarge reference"
+          aria-label={`Enlarge ${p.common} reference image`}
+        />
+      )}
+      <button
+        onClick={p.onSelect ?? p.onApply}
+        disabled={p.disabled}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent -outline-offset-2"
+        title={p.disabled ? 'Focus an image first' : p.onSelect ? `Select ${p.common}` : `Apply ${p.common}`}
+        aria-pressed={p.onSelect ? !!p.selected : undefined}
+      >
+        {p.iconUrl ? (
+          <img
+            src={p.iconUrl}
+            alt=""
+            loading="lazy"
+            className="w-10 h-10 object-cover border border-rule bg-paperHover shrink-0"
+          />
+        ) : (
+          <span className="w-10 h-10 grid place-items-center border border-rule bg-paperHover text-[10px] font-mono text-inkMute shrink-0">
+            {p.chip ?? '—'}
+          </span>
+        )}
+        <span className="min-w-0">
+          <span className="block text-[14px] text-ink truncate">{p.common}</span>
+          <span className="block text-[12px] text-inkMute font-mono italic truncate">{p.scientific}</span>
+        </span>
+        {p.applied && (
+          <span className="ml-auto text-accent text-[13px] font-mono shrink-0" title="Applied" aria-label="Applied">
+            ✓
+          </span>
+        )}
+      </button>
+
+      {/* Keep the Add button and key badge in fixed trailing slots. The optional
+          key controls can grow to their left without shifting the Add button
+          from row to row. */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {p.capturing ? (
+          <span className="text-[11px] font-mono text-accent animate-pulse">press a key, or tap Shift/Control…</span>
+        ) : (
+          <>
+            {p.onStartCapture && (
+              <button
+                onClick={p.onStartCapture}
+                className="inline-flex items-center justify-center min-w-11 min-h-11 md:min-w-0 md:min-h-0 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 focus:opacity-100 text-[11px] font-mono text-inkSoft hover:text-ink underline decoration-dotted focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                title="Assign a key to this species"
+              >
+                {p.badge ? 'rebind' : 'assign key'}
+              </button>
+            )}
+            {p.onClearKey && (
+              <button
+                onClick={p.onClearKey}
+                className="inline-flex items-center justify-center min-w-11 min-h-11 md:min-w-0 md:min-h-0 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 focus:opacity-100 text-[11px] font-mono text-inkMute hover:text-warn"
+                title="Clear this key"
+                aria-label={`Clear key for ${p.common}`}
+              >
+                ✕
+              </button>
+            )}
+            {p.onSelect && (
+              <button
+                onClick={p.onApply}
+                disabled={p.disabled}
+                className="inline-flex w-11 h-11 md:w-7 md:h-7 shrink-0 items-center justify-center text-base font-mono text-accent hover:bg-paperHover disabled:text-inkMute disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                title={p.applied ? `${p.common} already applied` : `Apply ${p.common}`}
+                aria-label={p.applied ? `${p.common} already applied` : `Apply ${p.common}`}
+              >
+                +
+              </button>
+            )}
+            <span className="inline-flex w-8 shrink-0 justify-center">
+              {p.badge && (
+                <kbd
+                  className={`px-1.5 h-5 min-w-5 grid place-items-center border text-[11px] font-mono uppercase ${
+                    p.badgeConflict
+                      ? 'border-inkMute text-inkMute line-through'
+                      : 'border-ink text-ink'
+                  }`}
+                  title={p.badgeConflict ?? undefined}
+                >
+                  {p.badge}
+                </kbd>
+              )}
+            </span>
+            {p.badge && p.badgeConflict && <span className="sr-only">{p.badgeConflict}</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
