@@ -48,6 +48,8 @@ const isControl = (t: Target) => {
   return !!el && (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'SELECT');
 };
 
+const isTile = (t: Target) => (t as HTMLElement | null)?.dataset?.testid === 'photo-tile';
+
 /** Where a standalone Shift or Control tap may tag: not while typing or behind a dialog. */
 export const modifierTarget = (s: KeyContext, target: Target): boolean =>
   !s.modalOpen && !isTyping(target) && (!!s.capturingFor || s.hasTarget);
@@ -94,8 +96,8 @@ export function handleKey(e: Key, s: KeyContext): void {
     }
     return;
   }
-  // A focused button, link or photo tile keeps its own Enter and Space.
-  if ((e.key === 'Enter' || (e.key === ' ' && !e.shiftKey)) && isControl(e.target)) return;
+  // A focused button keeps its own Enter and Space; Space on a photo tile still searches.
+  if ((e.key === 'Enter' || (e.key === ' ' && !isTile(e.target))) && isControl(e.target)) return;
 
   const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey;
   if (unmodified && s.selectedCount <= 1 && /^\d$/.test(e.key)) {

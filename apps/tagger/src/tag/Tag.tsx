@@ -353,12 +353,24 @@ export function Tag({ session, about, species, card, title }: { session: Session
 
   return (
     <div className="h-full flex flex-col min-h-0" aria-hidden={view === 'focus'}>
-      <div className="shrink-0 border-b border-rule bg-panel flex flex-wrap items-center gap-3 px-3 py-2">
-        <a href="#" className="min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline">
+      <div className="shrink-0 border-b border-ruleSoft bg-panel flex items-center gap-3 px-3 py-1.5">
+        <a href="#" className="shrink-0 min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline">
           ← Your cards
         </a>
-        <h1 className="font-display text-[22px] font-[600] text-ink truncate">{title}</h1>
-        <div className="inline-flex border border-rule" role="group" aria-label="Show">
+        <h1 className="min-w-0 truncate font-display text-[22px] font-[600] text-ink">{title}</h1>
+        <div className="ml-auto shrink-0 flex items-center gap-3">
+          {tools}
+          <button
+            onClick={() => setCheatsheet(true)}
+            className="min-h-11 min-w-11 px-3 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            title="Keyboard shortcuts (?)"
+          >
+            ? Keys
+          </button>
+        </div>
+      </div>
+      <div className="shrink-0 border-b border-rule bg-panel flex items-center gap-4 px-3 py-1.5 overflow-x-auto">
+        <div className="shrink-0 inline-flex border border-rule" role="group" aria-label="Show">
           {(
             [
               ['all', 'All photos'],
@@ -376,10 +388,10 @@ export function Tag({ session, about, species, card, title }: { session: Session
             </button>
           ))}
         </div>
-        <span className="min-w-[10rem] text-[16px] text-inkSoft">
+        <span className="shrink-0 min-w-[11rem] text-[16px] text-inkSoft">
           {selected.size > 0 ? <span className="text-accent">{selected.size} chosen</span> : position > 0 && `Photo ${position.toLocaleString()} of ${visible.length.toLocaleString()}`}
         </span>
-        <label className="inline-flex items-center gap-2 min-h-11 text-[16px] text-inkSoft">
+        <label className="shrink-0 inline-flex items-center gap-2 min-h-11 text-[16px] text-inkSoft">
           <input
             type="checkbox"
             checked={advance}
@@ -395,16 +407,6 @@ export function Tag({ session, about, species, card, title }: { session: Session
           />
           Go to the next photo after tagging
         </label>
-        <div className="ml-auto flex items-center gap-3">
-          {tools}
-          <button
-            onClick={() => setCheatsheet(true)}
-            className="min-h-11 min-w-11 px-3 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-            title="Keyboard shortcuts (?)"
-          >
-            ? Keys
-          </button>
-        </div>
       </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px]">
@@ -483,7 +485,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
 function SaveIndicator({ status }: { status: SaveStatus }) {
   const text = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: "Couldn't save just now. Trying again; keep this page open." }[status];
   return (
-    <span role="status" data-save-status={status} className={`text-[16px] ${status === 'error' ? 'text-warn max-w-[20rem]' : 'min-w-[6rem] text-ok'}`}>
+    <span role="status" data-save-status={status} className={`text-[16px] text-right ${status === 'error' ? 'text-warn max-w-[22rem]' : 'min-w-[7rem] text-ok'}`}>
       {text}
     </span>
   );

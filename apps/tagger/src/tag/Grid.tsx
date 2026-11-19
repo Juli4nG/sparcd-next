@@ -63,6 +63,9 @@ export function Grid({
   useEffect(() => {
     const row = rowOf.get(focus);
     if (row !== undefined) virtualizer.scrollToIndex(row, { align: 'auto' });
+    // A tile left holding DOM focus would open the wrong photo on Enter.
+    const held = document.activeElement as HTMLElement | null;
+    if (held?.dataset.index && Number(held.dataset.index) !== focus) held.blur();
   }, [focus, rowOf, virtualizer]);
 
   return (

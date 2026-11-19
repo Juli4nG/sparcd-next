@@ -18,7 +18,8 @@ export function AppliedSpecies({
   onRemove: (key: string) => void;
 }) {
   return (
-    <div data-testid="applied-species" className="flex flex-wrap items-center gap-1.5">
+    <div data-testid="applied-species" className="min-h-11 flex flex-wrap items-center gap-1.5">
+      {!tags.length && <span className="text-[15px] text-inkMute">Not tagged yet</span>}
       {tags.map((t) => (
         <Chip key={t.key} tag={t} label={labelOf(t)} disabled={disabled} onSetCount={(n) => onSetCount(t.key, n)} onRemove={() => onRemove(t.key)} />
       ))}

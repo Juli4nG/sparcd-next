@@ -159,10 +159,10 @@ function Row(p: RowProps) {
             >
               +
             </button>
-            <span className="inline-flex w-14 shrink-0 justify-center">
+            <span className="inline-flex w-16 shrink-0 justify-center">
               {p.badge && (
                 <kbd
-                  className={`px-1.5 h-7 min-w-7 grid place-items-center border text-[14px] font-mono ${p.conflict ? 'border-inkMute text-inkMute line-through' : 'border-ink text-ink'}`}
+                  className={`px-1 h-7 min-w-7 grid place-items-center border text-[13px] font-mono ${p.conflict ? 'border-inkMute text-inkMute line-through' : 'border-ink text-ink'}`}
                   title={p.conflict ?? undefined}
                 >
                   {p.badge}
