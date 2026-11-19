@@ -22,9 +22,14 @@ const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 export const newShareId = (): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(26)), (b) => BASE32[b & 31]).join('');
 
-/** Originals named like a derived image are stored as `original-<name>`. */
-export const storedName = (fileName: string): string =>
-  /^(thumb|view)\.jpg$/i.test(fileName) ? `original-${fileName}` : fileName;
+/**
+ * The key name for an original: runs of dots collapse to one (Camtrap DP
+ * forbids `..` in a filePath), and a name like a derived image gets `original-`.
+ */
+export const storedName = (fileName: string): string => {
+  const safe = fileName.replace(/\.{2,}/g, '.');
+  return /^(thumb|view)\.jpg$/i.test(safe) ? `original-${safe}` : safe;
+};
 
 export const originalKey = (mediaID: string, fileName: string): string => `Media/${mediaID}/${storedName(fileName)}`;
 export const thumbKey = (mediaID: string): string => `Media/${mediaID}/thumb.jpg`;

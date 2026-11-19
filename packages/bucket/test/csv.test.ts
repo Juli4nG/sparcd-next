@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { COLUMNS, parseCsv, parseTable, serializeTable, toCsv, type Media } from '../src';
 
 describe('csv', () => {
+  it('refuses malformed files instead of reading them wrongly', () => {
+    expect(() => parseCsv('a,b\n"1,2\n3,4\n')).toThrow(/unclosed quote/);
+    expect(() => parseCsv('a,a\n1,2\n')).toThrow(/repeats/);
+  });
+
   it('has the Camtrap DP 1.0 column counts', () => {
     expect([COLUMNS.deployments.length, COLUMNS.media.length, COLUMNS.observations.length]).toEqual([24, 11, 28]);
   });

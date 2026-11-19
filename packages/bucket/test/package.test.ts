@@ -122,12 +122,11 @@ describe('a sample package', () => {
   });
 
   it('generates a share package', async () => {
-    const rows = await readPackage(session.bucket);
     const share = {
       id: 'k3k3k3k3k3k3k3k3k3k3k3k3k3', createdAt: '2026-11-19T09:00:00-07:00', expiresAt: '2026-11-26T09:00:00-07:00',
       deploymentIDs: ['juniper-draw_2026-11-17'], positionDecimals: 1, image: 'view' as const,
     };
-    const url = new URL(await writeShare(session.bucket, rows, share, about));
+    const url = new URL(await writeShare(session.bucket, share, about));
     expect(url.pathname).toBe(`/sparcd-next-ana/shared/${share.id}/datapackage.json`);
     expect(url.searchParams.get('X-Amz-Expires')).toBe('604800');
     const dp = JSON.parse(s3.text(`sparcd-next-ana/shared/${share.id}/datapackage.json`));
