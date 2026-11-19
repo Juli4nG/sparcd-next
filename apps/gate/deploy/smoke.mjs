@@ -29,12 +29,13 @@ async function call(method, path, { body, headers = {}, as = me } = {}) {
   return { status: res.status, headers: res.headers, text: await res.text() };
 }
 
-async function presigned(path, expires) {
+async function presignedGet(path, expires) {
   const u = new URL(`${endpoint}${path}`);
   u.searchParams.set('X-Amz-Expires', String(expires));
   const signed = await me.sign(u.toString(), { method: 'GET', aws: { signQuery: true } });
-  return (await fetch(signed.url)).status;
+  return fetch(signed.url);
 }
+const presigned = async (path, expires) => (await presignedGet(path, expires)).status;
 
 let failed = 0;
 function check(name, ok, detail = '') {
@@ -95,8 +96,14 @@ check('Media/ PUT with If-None-Match: * is written once', first.status === 200 |
 const again = await call('PUT', media, { body: photo, headers: { 'content-type': 'image/jpeg', 'if-none-match': '*' } });
 check('a second Media/ PUT is 412', again.status === 412, again.status);
 const thumb = await call('GET', media);
-check('Media/ GET is cached immutable', thumb.headers.get('cache-control') === 'private, max-age=604800, immutable',
+check('header-signed Media/ GET is not cached', thumb.headers.get('cache-control') === 'no-store',
   thumb.headers.get('cache-control'));
+check('object responses are sandboxed', (thumb.headers.get('content-security-policy') ?? '').startsWith('sandbox'),
+  thumb.headers.get('content-security-policy'));
+const presignedThumb = await presignedGet(media, 7200);
+check('presigned Media/ GET is cached for two hours',
+  presignedThumb.headers.get('cache-control') === 'private, max-age=7200, immutable',
+  presignedThumb.headers.get('cache-control'));
 
 check('a 7-day presign of a thumb works', await presigned(media, 604800) === 200);
 check('a 7-day presign of anything else is 403', await presigned(`${own}/smoke/check.txt`, 604800) === 403);
