@@ -1,6 +1,6 @@
 // Shared fixture loader for the contract tests. The fixtures themselves are
 // materialized by `_generate.mjs` (see that file for provenance) and are the
-// durable golden data both sparcd-uploader and sparcd-tagger test against.
+// durable golden data the old Uploader and Tagger tested against.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

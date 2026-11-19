@@ -1,7 +1,7 @@
-### Contributing to sparcd-exploration
+### Contributing to sparcd-next
 
-* The contributors are listed in [AUTHORS.md](https://github.com/CulverLab/sparcd-exploration/blob/main/AUTHORS.md) (add yourself).
-* This project is licensed under the GPL v3, see [LICENSE](https://github.com/CulverLab/sparcd-exploration/blob/main/LICENSE).
+* The contributors are listed in [AUTHORS.md](https://github.com/Juli4nG/sparcd-next/blob/main/AUTHORS.md) (add yourself).
+* This project is licensed under the GPL v3, see [LICENSE](https://github.com/Juli4nG/sparcd-next/blob/main/LICENSE).
 * We use the [C4 (Collective Code Construction Contract)](https://rfc.zeromq.org/spec/44/) process for contributions.
 Please read this if you are unfamiliar with it. The decision to adopt C4 is
 [recorded in this discussion](https://github.com/orgs/CulverLab/discussions/11).

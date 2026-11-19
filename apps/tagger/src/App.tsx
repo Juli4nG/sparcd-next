@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { loadConfig, restoreSession, signOut, type About, type Config, type Session, type Species } from '@sparcd/bucket';
 import { CardList } from './CardList';
 import { loadCard, loadSettings, type Card } from './data/card';
+import { shareFromHash } from './data/share';
 import { saveEverything, unsavedEdits } from './data/useTagging';
 import { cardTitle } from './dates';
+import { SharePage } from './share/SharePage';
 import { SignIn } from './SignIn';
 import { Tag } from './tag/Tag';
 import { Dialog } from './ui/Dialog';
@@ -18,6 +20,7 @@ const cardFromHash = () => {
 export function App() {
   const [start, setStart] = useState<Start | null>(null);
   const [cardId, setCardId] = useState(cardFromHash);
+  const [shareUrl, setShareUrl] = useState(shareFromHash);
   const [leaving, setLeaving] = useState<{ go: () => void; failed: boolean } | null>(null);
 
   /** Leaving a card waits for its tags to save; if they can't, the person decides. */
@@ -38,7 +41,11 @@ export function App() {
       .catch(() => setStart({ failed: true }));
     const onHash = () => {
       const next = cardFromHash();
-      void leaveRef.current(() => setCardId(next));
+      const share = shareFromHash();
+      void leaveRef.current(() => {
+        setCardId(next);
+        setShareUrl(share);
+      });
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -68,9 +75,12 @@ export function App() {
           Sign out
         </button>
       </header>
-      <div className="flex-1 min-h-0">{cardId ? <CardPage key={cardId} session={session} cardId={cardId} /> : <CardList session={session} />}</div>
+      <div className="flex-1 min-h-0">{shareUrl !== null ? <SharePage key={shareUrl} session={session} url={shareUrl} endpoint={config.endpoint} /> : cardId ? <CardPage key={cardId} session={session} cardId={cardId} /> : <CardList session={session} />}</div>
       {leaving && (
-        <Leaving failed={leaving.failed} onRetry={() => leave(leaving.go)} onLeave={() => {
+        <Leaving
+          failed={leaving.failed}
+          onRetry={() => leave(leaving.go)}
+          onLeave={() => {
             setLeaving(null);
             leaving.go();
           }}
@@ -126,7 +136,7 @@ function Leaving({ failed, onRetry, onLeave }: { failed: boolean; onRetry: () =>
   );
 }
 
-function Message({ children, warn }: { children: React.ReactNode; warn?: boolean }) {
+export function Message({ children, warn }: { children: React.ReactNode; warn?: boolean }) {
   return (
     <div className="h-full grid place-items-center p-8">
       <p role={warn ? 'alert' : 'status'} className={`text-[19px] max-w-[36rem] text-center ${warn ? 'text-warn' : 'text-inkMute'}`}>

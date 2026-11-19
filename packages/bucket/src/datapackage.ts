@@ -26,6 +26,8 @@ export type DatapackageInput = {
   created?: Date;
   /** Share packages: each resource's signed URL. Adds `licenses` from `lab.shareLicenses`. */
   sharePaths?: Record<Table, string>;
+  /** Share packages: the signed URL of `thumbs.json`, as the custom `sparcdThumbs` property. */
+  shareThumbs?: string;
 };
 
 export function buildDatapackage(p: DatapackageInput): Record<string, unknown> {
@@ -58,5 +60,6 @@ export function buildDatapackage(p: DatapackageInput): Record<string, unknown> {
       encoding: 'utf-8',
       schema: `${CAMTRAP}/${name}-table-schema.json`,
     })),
+    ...(p.shareThumbs && { sparcdThumbs: p.shareThumbs }),
   };
 }
