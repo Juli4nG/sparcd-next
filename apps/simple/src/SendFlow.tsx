@@ -463,7 +463,7 @@ function usePace(progress: Progress | undefined, card: CardFile[]): { speed: str
       if (!m.rate) return;
       const speed = `${((m.rate * avgBytes) / 1_000_000).toFixed(1)} MB per second`;
       let left = pace.left;
-      if (p.done - p.sentBefore >= 4 && now - p.startedAt >= 10_000 && (m.shownMs === undefined || now - m.shownAt >= 15_000)) {
+      if (p.done - p.sentBefore >= 3 && now - p.startedAt >= 5_000 && (m.shownMs === undefined || now - m.shownAt >= 15_000)) {
         let ms = ((p.total - p.done) / m.rate) * 1000;
         if (m.shownMs !== undefined) ms = Math.min(ms, m.shownMs * 1.25);
         m.shownMs = ms;
@@ -506,7 +506,7 @@ function Bar({ pct, thick }: { pct: number; thick?: boolean }) {
 /** The upload keeps going above the questions. */
 function UploadBar({ upload, card }: { upload: Upload; card: CardFile[] }) {
   const c = counts(upload, card);
-  const { speed } = usePace(upload.progress, card);
+  const { speed, left } = usePace(upload.progress, card);
   return (
     <div className="h-[76px] mb-6 flex flex-col justify-center gap-2 px-4 border border-ruleSoft bg-panel" data-testid="upload-bar">
       <Bar pct={c.pct} />
@@ -516,7 +516,7 @@ function UploadBar({ upload, card }: { upload: Upload; card: CardFile[] }) {
           : c.waiting
             ? `All ${photos(c.total)} uploaded. Answer the questions to finish.`
             : c.uploading
-              ? [`${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded`, speed].filter(Boolean).join(' · ')
+              ? [`${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded`, speed, left].filter(Boolean).join(' · ')
               : 'Getting the photos ready…'}
       </p>
     </div>
