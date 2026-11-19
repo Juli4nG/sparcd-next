@@ -22,20 +22,11 @@
     "noFallthroughCasesInSwitch": true,
     "types": [
       "vite/client"
-    ],
-    "paths": {
-      "@sparcd/bucket": [
-        "./standin/bucket/index.ts"
-      ],
-      "@sparcd/camtrap": [
-        "../../packages/camtrap/src/index.ts"
-      ]
-    }
+    ]
   },
   "include": [
     "src",
     "test",
-    "standin",
     "vite.config.ts"
   ]
 }
