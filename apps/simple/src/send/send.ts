@@ -13,10 +13,12 @@ import {
 import type { ReadResult } from '../workers/photo.worker';
 import { deploymentRow, keysOf, mediaRow, planSend, toPhotos, type Photo } from './photos';
 import { createPool, type Pool } from './pool';
+import { openShards, type Shards } from './shards';
 import type { CardFile } from './scan';
 
 export const CHECKPOINT_EVERY = 250;
-const PARALLEL = 6;
+/** Photos in flight: about three per endpoint, within what browser memory takes comfortably. */
+const lanesFor = (endpoints: number) => Math.min(16, Math.max(6, endpoints * 3));
 
 export type Progress =
   | { phase: 'reading'; done: number; total: number; startedAt: number }
@@ -83,6 +85,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
   void job.details.then((d) => (details = d));
   const pool = createPool();
   job.signal.addEventListener('abort', pool.close);
+  const shards = await openShards(session);
   const t0 = performance.now();
   try {
     const unread: CardFile[] = [];
@@ -122,7 +125,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const pending: Photo[] = [...plan.rowOnly];
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
       try {
-        await putPhoto(session, photo, missing, pool);
+        await putPhoto(shards, photo, missing, pool);
         pending.push(photo);
       } catch (err) {
         if (!photoProblem(err)) throw new PhotoError(photo.path, err);
@@ -144,7 +147,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
         }
       }
     };
-    await Promise.all(Array.from({ length: PARALLEL }, lane));
+    await Promise.all(Array.from({ length: lanesFor(shards.live()) }, lane));
     await saving;
     if (failure) throw failure;
     job.onProgress({ phase: 'waiting', done, total, startedAt, sentBefore });
@@ -170,10 +173,9 @@ export async function sendCard(job: Job): Promise<Outcome> {
  * Every file is made before any is stored, so a photo that can't be decoded
  * never has its original stored. The original goes up without its camera data.
  */
-async function putPhoto(session: Session, photo: Photo, missing: string[], pool: Pool) {
+async function putPhoto(shards: Shards, photo: Photo, missing: string[], pool: Pool) {
   const keys = keysOf(photo);
-  const put = (key: string, body: ArrayBuffer, sha256: string) =>
-    session.bucket.putObject(key, new Uint8Array(body), { contentType: 'image/jpeg', sha256 });
+  const put = (key: string, body: ArrayBuffer, sha256: string) => shards.put(key, new Uint8Array(body), sha256);
   const d = await pool.derive(photo.file);
   await Promise.all([
     missing.includes('thumb') && put(keys.thumb, d.thumb, d.thumbSha256),

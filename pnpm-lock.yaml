@@ -33,6 +33,9 @@ importers:
       '@sparcd/bucket':
         specifier: workspace:*
         version: link:../../packages/bucket
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
       exifr:
         specifier: ^7.1.3
         version: 7.1.3
