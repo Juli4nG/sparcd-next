@@ -6,7 +6,6 @@ import {
   savePackage,
   type Changes,
   type Lab,
-  type Media,
   type PackageRows,
   type Session,
   type Site,
@@ -21,7 +20,7 @@ const PARALLEL = 6;
 
 export type Progress =
   | { phase: 'reading'; done: number; total: number; startedAt: number }
-  | { phase: 'sending'; done: number; total: number; startedAt: number; sentBefore: number };
+  | { phase: 'sending' | 'waiting'; done: number; total: number; startedAt: number; sentBefore: number };
 
 export type Outcome = {
   total: number;
@@ -45,11 +44,13 @@ const photoProblem = (err: unknown) =>
   (err instanceof S3Error && err.status === 413) ||
   (err instanceof Error && ['NotReadableError', 'EncodingError', 'InvalidStateError'].includes(err.name));
 
+/** What the volunteer fills in while the photos go up. Photos are stored by fingerprint, so only the rows wait for this. */
+export type Details = { site: Site; deploymentID: string; comments: string };
+
 type Job = {
   session: Session;
   lab: Lab;
-  site: Site;
-  deploymentID: string;
+  details: Promise<Details>;
   card: CardFile[];
   /** Survives "Try again" so photos aren't read twice. */
   reads: Map<File, ReadResult>;
@@ -77,7 +78,9 @@ async function readAll(job: Job, pool: Pool, unread: CardFile[]): Promise<void> 
 }
 
 export async function sendCard(job: Job): Promise<Outcome> {
-  const { session, deploymentID } = job;
+  const { session } = job;
+  let details: Details | undefined;
+  void job.details.then((d) => (details = d));
   const pool = createPool();
   job.signal.addEventListener('abort', pool.close);
   const t0 = performance.now();
@@ -102,10 +105,12 @@ export async function sendCard(job: Job): Promise<Outcome> {
     job.onProgress({ phase: 'sending', done, total, startedAt, sentBefore });
 
     let saving: Promise<unknown> = Promise.resolve();
-    const save = (rows: Media[]): Promise<PackageRows> => {
+    const save = (photos: Photo[]): Promise<PackageRows> => {
+      const { site, deploymentID, comments } = details!;
+      const rows = photos.map((p) => mediaRow(p, deploymentID));
       const changes: Changes = rows.length
         ? {
-            deployments: (d) => mergeDeployments(d, [deploymentRow(job.site, deploymentID, rows, cameraModel)], 'widen'),
+            deployments: (d) => mergeDeployments(d, [{ ...deploymentRow(site, deploymentID, rows, cameraModel), deploymentComments: comments }], 'widen'),
             media: (m) => mergeMedia(m, rows),
           }
         : {};
@@ -114,22 +119,18 @@ export async function sendCard(job: Job): Promise<Outcome> {
       return saved;
     };
 
-    const rowOnly = plan.rowOnly.map((p) => mediaRow(p, deploymentID));
-    for (let i = 0; i < rowOnly.length; i += CHECKPOINT_EVERY) await save(rowOnly.slice(i, i + CHECKPOINT_EVERY));
-    // Time left is judged from new photos only, not from catching up on saved ones.
-    startedAt = performance.now();
-
-    const pending: Media[] = [];
+    const pending: Photo[] = [...plan.rowOnly];
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
       try {
         await putPhoto(session, photo, missing, pool);
-        pending.push(mediaRow(photo, deploymentID));
+        pending.push(photo);
       } catch (err) {
         if (!photoProblem(err)) throw new PhotoError(photo.path, err);
         leftOut.push(photo.file.name);
       }
       job.onProgress({ phase: 'sending', done: ++done, total, startedAt, sentBefore });
-      if (pending.length >= CHECKPOINT_EVERY) await save(pending.splice(0));
+      // Long uploads save rows as they go, once the details are in.
+      if (details && pending.length >= CHECKPOINT_EVERY) await save(pending.splice(0));
     };
 
     let next = 0;
@@ -146,7 +147,11 @@ export async function sendCard(job: Job): Promise<Outcome> {
     await Promise.all(Array.from({ length: PARALLEL }, lane));
     await saving;
     if (failure) throw failure;
-    const saved = await save(pending.splice(0));
+    job.onProgress({ phase: 'waiting', done, total, startedAt, sentBefore });
+    details = await job.details;
+    const { deploymentID } = details;
+    for (let i = 0; i < pending.length; i += CHECKPOINT_EVERY) await save(pending.slice(i, i + CHECKPOINT_EVERY));
+    const saved = await save([]);
     const t2 = performance.now();
     return {
       total,

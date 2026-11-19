@@ -4,13 +4,13 @@ import { useOnline } from '@sparcd/auth-ui';
 import { Message } from './App';
 import { cardLine, rangeOf } from './cardLine';
 import { scanDrop, scanFileList, type CardFile } from './send/scan';
-import { PhotoError, sendCard, type Outcome, type Progress } from './send/send';
+import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
 import { timeLeft } from './send/words';
 import { PawStamp } from './ui/Paw';
 import { bigPrimary, bigSecondary, focusRing, quietLink } from './ui/look';
 import type { ReadResult } from './workers/photo.worker';
 
-type Step = 'site' | 'date' | 'card' | 'send' | 'done';
+type Step = 'card' | 'site' | 'date' | 'notes' | 'send';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const isoDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -36,14 +36,25 @@ function guessFromFolder(folder: string, sites: Site[]): { site?: Site; date?: s
   return { site, date: valid ? date : undefined };
 }
 
+type Deferred = { promise: Promise<Details>; resolve: (d: Details) => void };
+const deferred = (): Deferred => {
+  let resolve!: (d: Details) => void;
+  const promise = new Promise<Details>((r) => (resolve = r));
+  return { promise, resolve };
+};
+
 export function SendFlow({ session, onSending }: { session: Session; onSending: (on: boolean) => void }) {
   const [settings, setSettings] = useState<{ lab: Lab; sites: Site[] } | 'failed'>();
   const [step, setStep] = useState<Step>('card');
   const [guessDate, setGuessDate] = useState<string>();
   const [site, setSite] = useState<Site>();
   const [date, setDate] = useState(daysAgo(0));
+  const [notes, setNotes] = useState('');
   const [card, setCard] = useState<CardFile[]>([]);
-  const [outcome, setOutcome] = useState<Outcome>();
+  const [started, setStarted] = useState(false);
+  const [details] = useState(deferred);
+  const lab = settings && settings !== 'failed' ? settings.lab : undefined;
+  const upload = useUpload(session, lab, card, started, details.promise);
 
   useEffect(() => {
     Promise.all([session.settings.getText('lab.json'), session.settings.getText('sites.csv')]).then(
@@ -51,13 +62,19 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
       () => setSettings('failed'),
     );
   }, [session]);
+  const busy = started && !upload.outcome;
   useEffect(() => {
-    onSending(step === 'send');
-  }, [step, onSending]);
+    onSending(busy);
+  }, [busy, onSending]);
   useEffect(() => () => onSending(false), [onSending]);
+  useWakeLock(busy && !upload.error?.signIn);
+  useLeaveWarning(busy && !upload.error?.signIn);
 
   if (!settings) return <Message>Loading…</Message>;
   if (settings === 'failed') return <Message warn>We couldn't load the list of sites. Check your internet connection, then reload the page.</Message>;
+
+  const folder = folderOf(card);
+  const bar = <UploadBar upload={upload} card={card} />;
 
   if (step === 'card')
     return (
@@ -70,6 +87,7 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
             if (guess.site) setSite(guess.site);
             setGuessDate(guess.date);
             if (guess.date) setDate(guess.date);
+            setStarted(true);
             setStep('site');
           }}
         />
@@ -77,33 +95,54 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
     );
   if (step === 'site')
     return (
-      <Screen onBack={() => setStep('card')} question="Where was the camera?" folder={folderOf(card)}>
+      <Screen question="Where was the camera?" folder={folder} bar={bar}>
         <SitePicker sites={settings.sites} chosen={site} onPick={(s) => (setSite(s), setStep('date'))} />
       </Screen>
     );
   if (step === 'date')
     return (
-      <Screen onBack={() => setStep('site')} question="When were these photos collected?" folder={folderOf(card)}>
-        <DatePicker date={date} guess={guessDate} onPick={(d) => (setDate(d), setStep('send'))} />
+      <Screen onBack={() => setStep('site')} question="When were these photos collected?" folder={folder} bar={bar}>
+        <DatePicker date={date} guess={guessDate} onPick={(d) => (setDate(d), setStep('notes'))} />
       </Screen>
     );
-  if (step === 'send')
+  const line = cardLine({ range: rangeOf(site!.deploymentGroups), name: site!.locationName, id: site!.locationID, photos: card.length, date });
+  if (step === 'notes')
     return (
-      <Screen question="Uploading your photos" folder={folderOf(card)}>
-        <Sending
-          session={session}
-          lab={settings.lab}
-          site={site!}
-          date={date}
-          card={card}
-          onDone={(o) => (setOutcome(o), setStep('done'))}
-        />
+      <Screen onBack={() => setStep('date')} question="Anything to add?" folder={folder} bar={bar}>
+        <div className="flex flex-col gap-5">
+          <p className="text-[22px] text-ink">{line}</p>
+          <label className="flex flex-col gap-2 text-[20px] text-inkSoft">
+            Notes (you can leave this empty)
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className={`w-full px-4 py-3 border-2 border-ink bg-panel text-[22px] text-ink ${focusRing}`}
+            />
+          </label>
+          <div>
+            <button
+              onClick={() => {
+                details.resolve({ site: site!, deploymentID: deploymentId(site!.locationID, date), comments: notes.trim() });
+                setStep('send');
+              }}
+              className={`${bigPrimary} h-[72px] px-12 text-[26px]`}
+            >
+              Finish
+            </button>
+          </div>
+        </div>
       </Screen>
     );
-  return <Done outcome={outcome!} line={cardLine({ range: rangeOf(site!.deploymentGroups), name: site!.locationName, id: site!.locationID, photos: outcome!.total, date })} />;
+  if (upload.outcome) return <Done outcome={upload.outcome} line={line} />;
+  return (
+    <Screen question="Uploading your photos" folder={folder}>
+      <BigProgress upload={upload} card={card} line={line} />
+    </Screen>
+  );
 }
 
-function Screen({ question, back, onBack, folder, children }: { question: string; back?: string; onBack?: () => void; folder?: string; children: ReactNode }) {
+function Screen({ question, back, onBack, folder, bar, children }: { question: string; back?: string; onBack?: () => void; folder?: string; bar?: ReactNode; children: ReactNode }) {
   return (
     <main className="h-full overflow-y-auto">
       <div className="max-w-[760px] mx-auto px-6 pt-6 pb-10">
@@ -124,6 +163,7 @@ function Screen({ question, back, onBack, folder, children }: { question: string
             </span>
           )}
         </div>
+        {bar}
         <h1 className="font-display text-[38px] leading-tight font-[600] text-ink mb-6">{question}</h1>
         {children}
       </div>
@@ -349,17 +389,62 @@ function useLeaveWarning(active: boolean) {
   }, [active]);
 }
 
-/** Checking photos is quick next to sending them, so it fills only the first part of the bar. */
+/** Reading photos is quick next to uploading them, so it fills only the first part of the bar. */
 const READING_SHARE = 0.15;
 const RETRY_MS = 8000;
 
+type Upload = { progress?: Progress; error?: Problem; online: boolean; outcome?: Outcome };
+
+/** Uploads the folder from the moment it's chosen; the rows wait for `details`. Carries on by itself after a pause. */
+function useUpload(session: Session, lab: Lab | undefined, card: CardFile[], started: boolean, details: Promise<Details>): Upload {
+  const [progress, setProgress] = useState<Progress>();
+  const [error, setError] = useState<Problem>();
+  const [outcome, setOutcome] = useState<Outcome>();
+  const [attempt, setAttempt] = useState(0);
+  const reads = useRef(new Map<File, ReadResult>());
+  const online = useOnline();
+
+  useEffect(() => {
+    if (!started || !lab) return;
+    const stop = new AbortController();
+    setError(undefined);
+    sendCard({
+      session,
+      lab,
+      details,
+      card,
+      reads: reads.current,
+      onProgress: (p) => !stop.signal.aborted && setProgress(p),
+      signal: stop.signal,
+    }).then(
+      (o) => !stop.signal.aborted && setOutcome(o),
+      (err) => {
+        if (stop.signal.aborted) return;
+        console.error(err);
+        setError(explain(err));
+      },
+    );
+    return () => stop.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, started, !!lab]);
+
+  useEffect(() => {
+    if (!error || error.signIn || !online) return;
+    const timer = setTimeout(() => setAttempt((a) => a + 1), RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [error, online]);
+
+  return { progress, error, online, outcome };
+}
+
 /**
- * A calm time left: the rate is smoothed, nothing shows until it has settled,
- * the words change at most every 15 seconds, and a new guess may grow by a
+ * Speed and time left in plain words. The rate is smoothed; time left shows
+ * only once it has settled, changes at most every 15 seconds, and may grow by a
  * quarter at most, so it never leaps from minutes to hours.
  */
-function useTimeLeft(progress: Progress | undefined): string {
-  const [text, setText] = useState('');
+function usePace(progress: Progress | undefined, card: CardFile[]): { speed: string; left: string } {
+  const [pace, setPace] = useState({ speed: '', left: '' });
+  const avgBytes = card.length ? card.reduce((n, c) => n + c.file.size, 0) / card.length : 0;
   const memo = useRef<{ at: number; done: number; rate?: number; shownMs?: number; shownAt: number }>({ at: 0, done: 0, shownAt: 0 });
   const latest = useRef(progress);
   latest.current = progress;
@@ -373,90 +458,86 @@ function useTimeLeft(progress: Progress | undefined): string {
       const dt = (now - m.at) / 1000;
       if (dt < 2) return;
       const instant = (p.done - m.done) / dt;
-      m.rate = m.rate === undefined ? instant : m.rate * 0.85 + instant * 0.15;
+      m.rate = m.rate === undefined ? instant : m.rate * 0.75 + instant * 0.25;
       Object.assign(m, { at: now, done: p.done });
-      if (p.done - p.sentBefore < 6 || now - p.startedAt < 20_000 || !m.rate) return;
-      if (m.shownMs !== undefined && now - m.shownAt < 15_000) return;
-      let ms = ((p.total - p.done) / m.rate) * 1000;
-      if (m.shownMs !== undefined) ms = Math.min(ms, m.shownMs * 1.25);
-      m.shownMs = ms;
-      m.shownAt = now;
-      setText(timeLeft(ms));
+      if (!m.rate) return;
+      const speed = `${((m.rate * avgBytes) / 1_000_000).toFixed(1)} MB per second`;
+      let left = pace.left;
+      if (p.done - p.sentBefore >= 4 && now - p.startedAt >= 10_000 && (m.shownMs === undefined || now - m.shownAt >= 15_000)) {
+        let ms = ((p.total - p.done) / m.rate) * 1000;
+        if (m.shownMs !== undefined) ms = Math.min(ms, m.shownMs * 1.25);
+        m.shownMs = ms;
+        m.shownAt = now;
+        left = timeLeft(ms);
+      }
+      setPace((old) => ({ speed, left: left || old.left }));
     }, 1000);
     return () => clearInterval(id);
-  }, []);
-  return text;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avgBytes]);
+  return pace;
 }
 
-function Sending({ session, lab, site, date, card, onDone }: { session: Session; lab: Lab; site: Site; date: string; card: CardFile[]; onDone: (o: Outcome) => void }) {
-  const [progress, setProgress] = useState<Progress>();
-  const [error, setError] = useState<Problem>();
-  const [attempt, setAttempt] = useState(0);
-  const reads = useRef(new Map<File, ReadResult>());
-  const online = useOnline();
-  const eta = useTimeLeft(progress);
-
-  useWakeLock(!error?.signIn);
-  useLeaveWarning(!error?.signIn);
-
-  useEffect(() => {
-    const stop = new AbortController();
-    setError(undefined);
-    sendCard({
-      session,
-      lab,
-      site,
-      deploymentID: deploymentId(site.locationID, date),
-      card,
-      reads: reads.current,
-      onProgress: (p) => !stop.signal.aborted && setProgress(p),
-      signal: stop.signal,
-    }).then(
-      (outcome) => !stop.signal.aborted && onDone(outcome),
-      (err) => {
-        if (stop.signal.aborted) return;
-        console.error(err);
-        setError(explain(err));
-      },
-    );
-    return () => stop.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt]);
-
-  // Sending carries on by itself: after a short pause, or once the internet is back.
-  useEffect(() => {
-    if (!error || error.signIn || !online) return;
-    const timer = setTimeout(() => setAttempt((a) => a + 1), RETRY_MS);
-    return () => clearTimeout(timer);
-  }, [error, online]);
-
-  const total = progress?.total ?? card.length;
-  const done = progress?.done ?? 0;
-  const sendingNow = progress?.phase === 'sending';
-  const already = progress?.phase === 'sending' ? progress.sentBefore : 0;
+function counts(upload: Upload, card: CardFile[]) {
+  const p = upload.progress;
+  const total = p?.total ?? card.length;
+  const done = p?.done ?? 0;
+  const uploading = p?.phase === 'sending' || p?.phase === 'waiting';
+  const already = p && p.phase !== 'reading' ? p.sentBefore : 0;
   const share = total ? done / total : 0;
-  const pct = (sendingNow ? READING_SHARE + (1 - READING_SHARE) * share : READING_SHARE * share) * 100;
+  const pct = (uploading ? READING_SHARE + (1 - READING_SHARE) * share : READING_SHARE * share) * 100;
+  return { total, done, uploading, already, pct, waiting: p?.phase === 'waiting' };
+}
 
+function Bar({ pct, thick }: { pct: number; thick?: boolean }) {
+  return (
+    <div
+      className={`${thick ? 'h-10 border-2' : 'h-3 border'} bg-paperHover border-ink overflow-hidden`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+    >
+      <span className="block h-full bg-ok transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** The upload keeps going above the questions. */
+function UploadBar({ upload, card }: { upload: Upload; card: CardFile[] }) {
+  const c = counts(upload, card);
+  const { speed } = usePace(upload.progress, card);
+  return (
+    <div className="h-[76px] mb-6 flex flex-col justify-center gap-2 px-4 border border-ruleSoft bg-panel" data-testid="upload-bar">
+      <Bar pct={c.pct} />
+      <p className="text-[18px] text-inkSoft tabular-nums truncate">
+        {!upload.online
+          ? 'No internet. Uploading will carry on when it’s back.'
+          : c.waiting
+            ? `All ${photos(c.total)} uploaded. Answer the questions to finish.`
+            : c.uploading
+              ? [`${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded`, speed].filter(Boolean).join(' · ')
+              : 'Getting the photos ready…'}
+      </p>
+    </div>
+  );
+}
+
+function BigProgress({ upload, card, line }: { upload: Upload; card: CardFile[]; line: string }) {
+  const c = counts(upload, card);
+  const { speed, left } = usePace(upload.progress, card);
+  const { error, online } = upload;
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-[22px] text-inkSoft">
-        {cardLine({ range: rangeOf(site.deploymentGroups), name: site.locationName, id: site.locationID, photos: card.length, date })}
-      </p>
-      <div
-        className="h-10 bg-paperHover border-2 border-ink overflow-hidden"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(pct)}
-      >
-        <span className="block h-full bg-ok transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
-      </div>
+      <p className="text-[22px] text-inkSoft">{line}</p>
+      <Bar pct={c.pct} thick />
       <p className="h-12 font-display text-[36px] font-[600] text-ink tabular-nums" data-testid="sent-count">
-        {sendingNow ? `${done.toLocaleString()} of ${total.toLocaleString()} uploaded` : 'Getting the photos ready…'}
+        {c.uploading ? `${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded` : 'Getting the photos ready…'}
       </p>
-      <p className="h-8 text-[22px] text-inkSoft">
-        {[already > 0 && `${already.toLocaleString()} already saved`, eta].filter(Boolean).join(' · ')}
+      <p className="h-8 text-[22px] text-ink tabular-nums" data-testid="pace">
+        {[speed, left].filter(Boolean).join(' · ')}
       </p>
+      <p className="h-8 text-[20px] text-inkSoft">{c.already > 0 && `${c.already.toLocaleString()} already saved`}</p>
       {error?.signIn ? (
         <div className="flex flex-col items-start gap-4">
           <p role="alert" className="text-[22px] text-warn">
