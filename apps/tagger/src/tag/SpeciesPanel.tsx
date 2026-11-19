@@ -95,7 +95,8 @@ type RowProps = {
 
 function Row(p: RowProps) {
   const { name, scientificName, speciesIconURL } = p.species;
-  const hidden = 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100';
+  // The key buttons show over the row's end on hover or focus, so a narrow panel keeps its width for the name.
+  const keyTools = `absolute right-32 top-1/2 -translate-y-1/2 flex items-center ${p.selected ? 'bg-mark' : 'bg-panel group-hover:bg-panelHover'} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto`;
   return (
     <div className={`group relative flex items-center gap-3 px-3 py-2 border-b border-ruleSoft ${p.selected ? 'bg-mark ring-2 ring-inset ring-accent' : 'hover:bg-panelHover'}`}>
       {speciesIconURL && (
@@ -133,23 +134,25 @@ function Row(p: RowProps) {
           <span className="text-[14px] text-accent animate-pulse">press a key, or tap Shift/Control…</span>
         ) : (
           <>
-            <button
-              onClick={p.onStartCapture}
-              className={`min-h-11 px-1 text-[13px] text-inkSoft hover:text-ink underline decoration-dotted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${hidden}`}
-              title="Choose a key for this species"
-            >
-              {p.badge ? 'change key' : 'set key'}
-            </button>
-            {p.badge && (
+            <span className={keyTools}>
               <button
-                onClick={p.onClearKey}
-                className={`w-8 h-11 text-[14px] text-inkMute hover:text-warn focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${hidden}`}
-                title="Remove this key"
-                aria-label={`Remove the key for ${name}`}
+                onClick={p.onStartCapture}
+                className="min-h-11 px-1 text-[13px] text-inkSoft hover:text-ink underline decoration-dotted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                title="Choose a key for this species"
               >
-                ✕
+                {p.badge ? 'change key' : 'set key'}
               </button>
-            )}
+              {p.badge && (
+                <button
+                  onClick={p.onClearKey}
+                  className="w-8 h-11 text-[14px] text-inkMute hover:text-warn focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                  title="Remove this key"
+                  aria-label={`Remove the key for ${name}`}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
             <button
               onClick={p.onApply}
               disabled={p.disabled}
