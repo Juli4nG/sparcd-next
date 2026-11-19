@@ -109,7 +109,12 @@ export function NextUpload() {
   if (running && progress?.phase === 'sending') {
     const sent = progress.done - progress.sentBefore;
     const elapsed = now - progress.startedAt;
-    if (sent >= 10 && elapsed > 20_000) eta = timeLeft(((progress.total - progress.done) * elapsed) / sent);
+    if (sent >= 10 && elapsed > 20_000) {
+      // Photos on one card are much the same size, so the average stands in for the ones sent.
+      const avgBytes = card.reduce((n, c) => n + c.file.size, 0) / card.length;
+      const mbPerSecond = (sent * avgBytes) / 1e6 / (elapsed / 1000);
+      eta = `${mbPerSecond.toFixed(1)} MB per second · ${timeLeft(((progress.total - progress.done) * elapsed) / sent)}`;
+    }
   }
   const stored = outcome ? outcome.total - outcome.alreadySaved - outcome.leftOut.length : 0;
 
