@@ -34,3 +34,6 @@ apps/sparcd-shard-proxy/deploy/cloudflare-worker/package-lock.json
 
 # Local Codex preferences; durable on this machine, never committed.
 .codex/
+
+# Tagger: local MinIO binary, data and config for dev runs
+apps/tagger/.local/
