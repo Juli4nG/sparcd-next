@@ -40,7 +40,7 @@ export function ShareDialog({ deployment, result, onClose }: { deployment: Deplo
             />
             <button
               onClick={copy}
-              className="w-full min-h-14 bg-ink text-paper text-[15px] font-[600] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+              className="w-full min-h-11 bg-ink text-paper border border-ink px-3.5 py-2 text-[14px] font-body font-[600] hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
             >
               {copied ? 'Copied' : 'Copy link'}
             </button>
