@@ -24,7 +24,8 @@ export function useImageUrl(card: Card, mediaID: string, size: ImageSize): Image
     };
   }, [card, mediaID, size, key, n]);
   const retry = () => setAttempt({ key, n: n + 1 });
-  const onError = () => (n === 0 ? retry() : setState({ key, url: state.url, failed: true }));
+  // The first retry waits a moment, so a burst the server turned away (HTTP 429) isn't repeated at once.
+  const onError = () => (n === 0 ? setTimeout(retry, 1500) : setState({ key, url: state.url, failed: true }));
   return { ...(state.key === key ? state : { failed: false }), retry, onError };
 }
 
@@ -50,6 +51,12 @@ function TryAgain({ onClick }: { onClick: () => void }) {
 export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt: string }) {
   const { url, failed, retry, onError } = useImageUrl(card, mediaID, 'thumb');
   const [loaded, setLoaded] = useState<string>();
+  // Only tiles that stay on screen for a moment ask for their photo, so flicking through 5,000 photos doesn't flood the server.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(true), 150);
+    return () => clearTimeout(t);
+  }, []);
   if (failed) {
     return (
       <div className="aspect-[4/3] bg-paperHover border border-rule flex flex-col items-center justify-center gap-1 text-[13px] text-warn">
@@ -61,7 +68,7 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   return (
     <div className="relative aspect-[4/3] bg-paperHover border border-rule overflow-hidden">
       {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-ink fn-breathe" />}
-      {url && (
+      {url && settled && (
         <img
           src={url}
           alt={alt}
