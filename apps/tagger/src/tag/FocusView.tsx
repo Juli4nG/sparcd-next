@@ -1,3 +1,4 @@
+import { PawTrail } from '../ui/Paw';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Media } from '@sparcd/bucket';
@@ -37,10 +38,10 @@ export function FocusView({
   return createPortal(
     <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[100] flex flex-col bg-paper text-ink outline-none" role="dialog" aria-modal="true" aria-label="Large photo">
       <div className="shrink-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-rule bg-panel px-3 py-1.5">
-        <div className="min-w-0 truncate text-[15px] font-mono text-inkSoft" title={photo.fileName}>
+        <div className="min-w-0 truncate text-[13px] font-mono text-inkSoft" title={photo.fileName}>
           {photo.fileName}
         </div>
-        <div role="progressbar" aria-label="Photo position" aria-valuemin={1} aria-valuenow={position} aria-valuemax={count} aria-valuetext={label} className="w-[min(30vw,280px)] text-center text-[15px] text-inkSoft">
+        <div role="progressbar" aria-label="Photo position" aria-valuemin={1} aria-valuenow={position} aria-valuemax={count} aria-valuetext={label} className="w-[min(30vw,280px)] text-center text-[13px] text-inkSoft">
           <span className="block whitespace-nowrap">{label}</span>
           <span aria-hidden className="mt-1 block h-1.5 overflow-hidden rounded-full bg-ruleSoft">
             <span className="block h-full bg-accent" style={{ width: `${(position / count) * 100}%` }} />
@@ -50,10 +51,10 @@ export function FocusView({
           {tools}
           <button
             onClick={onClose}
-            className="min-h-11 px-3 inline-flex items-center gap-2 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className="min-h-11 md:min-h-8 px-3 inline-flex items-center gap-2 border border-rule text-[14px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             title="Back to all photos (Esc)"
           >
-            <span aria-hidden className="text-[22px] leading-none">×</span> Close
+            <span aria-hidden className="text-[18px] leading-none">×</span> Close
           </button>
         </div>
       </div>
@@ -83,9 +84,9 @@ function LargePhoto({ card, photo, tagged }: { card: Card; photo: Media; tagged:
   const [loaded, setLoaded] = useState<string>();
   if (failed)
     return (
-      <p className="text-[16px] text-warn">
+      <p className="text-[14px] text-warn">
         This photo didn't load.{' '}
-        <button onClick={retry} className="min-h-11 px-3 border border-rule text-ink underline">
+        <button onClick={retry} className="min-h-11 md:min-h-8 px-3 border border-rule text-ink underline">
           Try again
         </button>
       </p>
@@ -105,7 +106,12 @@ function LargePhoto({ card, photo, tagged }: { card: Card; photo: Media; tagged:
           {tagged && loaded === url && <TaggedMark className="absolute top-1 left-1 w-[clamp(28px,4vw,56px)] aspect-square" />}
         </span>
       )}
-      {loaded !== url && <p role="status" className="absolute inset-0 grid place-items-center text-[15px] text-inkMute bg-paper">Loading the photo…</p>}
+      {loaded !== url && (
+        <div role="status" className="fn-appear absolute inset-0 grid place-content-center justify-items-center gap-4 bg-paper">
+          <PawTrail />
+          <span className="font-mono text-[12px] text-inkMute">Loading the photo…</span>
+        </div>
+      )}
     </>
   );
 }

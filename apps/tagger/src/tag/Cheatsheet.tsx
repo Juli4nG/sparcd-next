@@ -45,7 +45,7 @@ export function Cheatsheet({ onClose }: { onClose: () => void }) {
             <h3 className="font-body text-[13px] font-[600] tracking-[0.12em] uppercase text-inkSoft mb-2">{g.title}</h3>
             <ul className="space-y-2">
               {g.rows.map((r) => (
-                <li key={r.action} className="text-[15px]">
+                <li key={r.action} className="text-[13px]">
                   <span className="inline-flex gap-1 mr-2 align-middle">
                     {r.keys.map((k) => (
                       <kbd key={k} className="px-1.5 min-w-6 h-6 grid place-items-center border border-ink text-[13px] font-mono text-ink">

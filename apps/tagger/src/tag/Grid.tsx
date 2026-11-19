@@ -165,7 +165,7 @@ const Tile = memo(function Tile({
         <Thumb card={card} mediaID={photo.mediaID} alt={name} />
         {state !== 'untagged' && <TaggedMark className="absolute top-1 left-1 w-1/5 aspect-square" />}
       </span>
-      <span className={`mt-1 block truncate text-[15px] leading-[26px] ${state === 'untagged' ? 'text-inkMute' : 'text-ink'}`}>{label}</span>
+      <span className={`mt-1 block truncate text-[13px] leading-[26px] ${state === 'untagged' ? 'text-inkMute' : 'text-ink'}`}>{label}</span>
     </button>
   );
 });

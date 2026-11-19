@@ -323,7 +323,7 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
       header={
         <div className="space-y-2">
           {countPrefix && chosen.length <= 1 && (
-            <span role="status" className="inline-block border border-accent px-2 py-1 text-[15px] font-mono text-accent">
+            <span role="status" className="inline-block border border-accent px-2 py-1 text-[13px] font-mono text-accent">
               How many: {countPrefix}
             </span>
           )}
@@ -341,14 +341,14 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
             <button
               onClick={() => apply(NOTHING)}
               disabled={!hasTarget}
-              className="min-h-11 px-3 border border-ink text-[16px] text-ink hover:bg-panelHover disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              className="min-h-11 md:min-h-8 px-3 border border-ink text-[14px] text-ink hover:bg-panelHover disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
               {NOTHING_LABEL}
             </button>
             <button
               onClick={clearAll}
               disabled={!hasTarget}
-              className="min-h-11 px-2 text-[15px] text-inkSoft hover:text-warn underline decoration-dotted disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              className="min-h-11 md:min-h-8 px-2 text-[13px] text-inkSoft hover:text-warn underline decoration-dotted disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
               title={chosen.length ? `Remove every species from the ${chosen.length} chosen photos` : 'Remove every species from this photo'}
             >
               Clear Species
@@ -364,7 +364,7 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
       <button
         onClick={tagging.undo}
         disabled={!tagging.canUndo}
-        className="min-h-11 px-3 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        className="min-h-11 md:min-h-8 px-3 border border-rule text-[14px] text-inkSoft hover:border-ink hover:text-ink disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         title="Undo the last change (Ctrl+Z)"
       >
         ↶ Undo
@@ -375,21 +375,21 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
   return (
     <div className="h-full flex flex-col min-h-0" aria-hidden={view === 'focus'}>
       <div className="shrink-0 border-b border-ruleSoft bg-panel flex items-center gap-3 px-3 py-1.5">
-        <a href="#" className="shrink-0 min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline">
+        <a href="#" className="shrink-0 min-h-11 md:min-h-8 inline-flex items-center px-2 text-[14px] text-accent underline">
           ← Your cards
         </a>
-        <h1 className="min-w-0 truncate font-display text-[22px] font-[600] text-ink">{title}</h1>
+        <h1 className="min-w-0 truncate font-display text-[18px] font-[600] text-ink">{title}</h1>
         <div className="ml-auto shrink-0 flex items-center gap-3">
           <a
             href={`${simpleFlag(location.hash).rest}&simple`}
-            className="min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className="min-h-11 md:min-h-8 inline-flex items-center px-2 text-[14px] text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           >
             Try the simpler screen
           </a>
           {tools}
           <button
             onClick={() => setCheatsheet(true)}
-            className="min-h-11 min-w-11 px-3 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className="min-h-11 md:min-h-8 min-w-11 md:min-w-8 px-3 border border-rule text-[14px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             title="Keyboard shortcuts (?)"
           >
             ? Keys
@@ -409,16 +409,16 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
               key={value}
               onClick={() => setFilter(value)}
               aria-pressed={filter === value}
-              className={`min-h-11 px-3 text-[16px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${filter === value ? 'bg-ink text-paper' : 'text-inkSoft hover:bg-panelHover'}`}
+              className={`min-h-11 md:min-h-8 px-3 text-[14px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${filter === value ? 'bg-ink text-paper' : 'text-inkSoft hover:bg-panelHover'}`}
             >
               {label} ({counts[value].toLocaleString()})
             </button>
           ))}
         </div>
-        <span className="shrink-0 min-w-[11rem] text-[16px] text-inkSoft">
+        <span className="shrink-0 min-w-[11rem] text-[14px] text-inkSoft">
           {chosen.length > 0 ? <span className="text-accent">{chosen.length} chosen</span> : position > 0 && `Photo ${position.toLocaleString()} of ${visible.length.toLocaleString()}`}
         </span>
-        <label className="shrink-0 inline-flex items-center gap-2 min-h-11 text-[16px] text-inkSoft">
+        <label className="shrink-0 inline-flex items-center gap-2 min-h-11 md:min-h-8 text-[14px] text-inkSoft">
           <input
             type="checkbox"
             checked={advance}
@@ -450,9 +450,9 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
             onOpen={openFocus}
           />
         ) : (
-          <div className="p-6 text-[17px] text-inkSoft">
+          <div className="p-6 text-[14px] text-inkSoft">
             <p role="status">{filter === 'untagged' ? 'Every photo on this card is tagged.' : 'No photos are tagged yet.'}</p>
-            <button onClick={() => setFilter('all')} className="mt-3 min-h-11 px-3 border border-rule">
+            <button onClick={() => setFilter('all')} className="mt-3 min-h-11 md:min-h-8 px-3 border border-rule">
               Show all photos
             </button>
           </div>
@@ -486,12 +486,12 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
       {conflict && (
         <Dialog label="Key already used" onClose={() => setConflict(null)}>
           <DialogHeader title="That key is already used" onClose={() => setConflict(null)} />
-          <p className="px-5 py-4 text-[17px]">
+          <p className="px-5 py-4 text-[14px]">
             The key <kbd className="px-1.5 border border-ink font-mono">{keyLabel(conflict.key)}</kbd> is on {conflict.others.map((o) => o.name).join(', ')}.
             Move it to {conflict.name}?
           </p>
           <div className="flex justify-end gap-3 px-5 pb-5">
-            <button onClick={() => setConflict(null)} className="min-h-11 px-4 border border-rule text-[16px]">
+            <button onClick={() => setConflict(null)} className="min-h-11 md:min-h-8 px-4 border border-rule text-[14px]">
               Keep it where it is
             </button>
             <button
@@ -499,7 +499,7 @@ export function Tag({ species, card, title, tagging }: { species: Species[]; car
                 keys.assign(conflict.own, conflict.key, conflict.others.map(speciesKey));
                 setConflict(null);
               }}
-              className="min-h-11 px-4 border border-ink bg-ink text-paper text-[16px]"
+              className="min-h-11 md:min-h-8 px-4 border border-ink bg-ink text-paper text-[14px]"
             >
               Move it to {conflict.name}
             </button>
@@ -514,7 +514,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   const text = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: 'Not saved yet. Trying again…' }[status];
   // A fixed box, two lines at most, so a message never moves the buttons beside it.
   return (
-    <span role="status" data-save-status={status} className={`shrink-0 w-[9rem] text-[16px] leading-tight text-right ${status === 'error' ? 'text-warn' : 'text-ok'}`}>
+    <span role="status" data-save-status={status} className={`shrink-0 w-[9rem] text-[14px] leading-tight text-right ${status === 'error' ? 'text-warn' : 'text-ok'}`}>
       {text}
     </span>
   );

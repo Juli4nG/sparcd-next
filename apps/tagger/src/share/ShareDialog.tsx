@@ -20,7 +20,7 @@ export function ShareDialog({ deployment, result, onClose }: { deployment: Deplo
   return (
     <Dialog label="Share for tagging" onClose={onClose}>
       <DialogHeader title={`Share ${cardTitle(deployment)}`} onClose={onClose} />
-      <div className="p-5 space-y-4 text-[18px] text-inkSoft">
+      <div className="p-5 space-y-4 text-[15px] text-inkSoft">
         <p>
           Anyone you send this link to can tag these photos for 7 days. They won't see exactly where the camera was, or any photo you marked as
           having people in it.
@@ -36,11 +36,11 @@ export function ShareDialog({ deployment, result, onClose }: { deployment: Deplo
               aria-label="Link to send"
               value={link}
               onFocus={(e) => e.currentTarget.select()}
-              className="w-full bg-panel border border-rule px-3 py-3 text-[16px] text-ink font-mono"
+              className="w-full bg-panel border border-rule px-3 py-3 text-[14px] text-ink font-mono"
             />
             <button
               onClick={copy}
-              className="w-full min-h-14 bg-ink text-paper text-[19px] font-[600] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+              className="w-full min-h-14 bg-ink text-paper text-[15px] font-[600] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
             >
               {copied ? 'Copied' : 'Copy link'}
             </button>

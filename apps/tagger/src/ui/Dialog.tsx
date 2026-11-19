@@ -64,7 +64,7 @@ export function DialogHeader({ title, onClose }: { title: ReactNode; onClose: ()
       <h2 className="font-display text-[20px] font-[600] text-ink min-w-0">{title}</h2>
       <button
         onClick={onClose}
-        className="shrink-0 w-11 h-11 grid place-items-center border border-rule text-[18px] text-inkSoft hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        className="shrink-0 w-11 h-11 grid place-items-center border border-rule text-[15px] text-inkSoft hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         aria-label="Close"
       >
         ✕
