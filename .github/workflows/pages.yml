@@ -1,17 +1,10 @@
-name: Deploy tools to GitHub Pages
+name: Deploy Explorer to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "apps/sparcd-home/**"
       - "apps/sparcd-explorer/**"
-      - "apps/sparcd-uploader/**"
-      - "apps/sparcd-tagger/**"
-      - "packages/**"
-      - "scripts/build-offline.mjs"
-      - "scripts/offline/**"
-      - "pnpm-lock.yaml"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -53,7 +46,6 @@ jobs:
         working-directory: apps/sparcd-explorer
         run: uv run marimo export html-wasm notebooks/hello_wasm.py -o dist --mode run --force
 
-      # --- Uploader (Vite) -> /uploader ---
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -71,36 +63,12 @@ jobs:
           pnpm --filter @sparcd/sparcd-explorer exec playwright install --with-deps chromium
           pnpm --filter @sparcd/sparcd-explorer exec node tests/remember_connection_wasm.mjs dist
 
-      - name: Build uploader
-        run: pnpm --filter sparcd-uploader build
-        env:
-          PAGES_ROOT: /${{ github.event.repository.name }}/
-
-      - name: Build tagger
-        run: pnpm --filter sparcd-tagger build
-        env:
-          PAGES_ROOT: /${{ github.event.repository.name }}/
-
-      - name: Build coordinated offline release
-        run: node scripts/build-offline.mjs
-        env:
-          PAGES_ROOT: /${{ github.event.repository.name }}/
-
-      # --- Assemble combined site ---
       - name: Assemble site
         run: |
           set -euo pipefail
           rm -rf _site
-          mkdir -p _site/explorer _site/uploader _site/tagger
-          # Static landing page at the family root.
-          cp apps/sparcd-home/index.html _site/index.html
-          cp apps/sparcd-home/sparcd.png _site/sparcd.png
-          cp apps/sparcd-home/favicon.ico _site/favicon.ico
-          # Explorer WASM bundle moves under /explorer/ (was site root).
-          cp -r apps/sparcd-explorer/dist/. _site/explorer/
-          cp -r apps/sparcd-uploader/dist/. _site/uploader/
-          cp -r apps/sparcd-tagger/dist/. _site/tagger/
-          cp apps/sparcd-uploader/dist/offline-worker.js _site/offline-worker.js
+          mkdir -p _site
+          cp -r apps/sparcd-explorer/dist/. _site/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -278,7 +278,7 @@ export function serializeUploadComplete(c: UploadCompleteJson): string {
 }
 
 // ===========================================================================
-// v016 readers + tagger merge helpers (added for sparcd-tagger, P0).
+// v016 readers + tagger merge helpers (added for the old Tagger, P0).
 //
 // The writers above are the byte-shape contract; everything below is the
 // inverse plus the surgical merge the tagger needs. Two hard rules drive the
