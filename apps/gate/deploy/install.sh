@@ -49,7 +49,9 @@ install -m 0644 "$GATE_SRC"/settings-example/* "$APP/settings-example/"
 install -d -m 0700 /etc/sparcd-next
 if [ ! -f "$ENV_FILE" ]; then
   umask 077
-  sed -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}|" \
+  # The upload shards on 8443-8449 sign host:port, so each is an allowed host too.
+  SHARD_HOSTS=$(for p in 8443 8444 8445 8446 8447 8448 8449; do printf ',%s:%s' "$SITE_ADDRESS" "$p"; done)
+  sed -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}${SHARD_HOSTS}|" \
       -e '/^ACCESS_MASTER_KEY=/d' -e '/^DATA_KEY=/d' \
       "$GATE_SRC/deploy/gate.env.example" > "$ENV_FILE"
   umask 022
