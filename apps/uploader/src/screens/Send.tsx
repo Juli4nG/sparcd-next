@@ -5,30 +5,49 @@ import { PhotoError, sendCard, type Outcome, type Progress } from '../lib/send';
 import { number, timeLeft } from '../lib/words';
 import type { ReadResult } from '../workers/photo.worker';
 
-type Props = { session: Session; lab: Lab; site: Site; date: string; card: CardFile[]; onDone: (o: Outcome) => void };
+type Props = {
+  session: Session;
+  lab: Lab;
+  site: Site;
+  date: string;
+  card: CardFile[];
+  onDone: (o: Outcome) => void;
+  onSignIn: () => void;
+};
 
-function explain(err: unknown): string {
+type Problem = { message: string; signIn?: boolean };
+
+function explain(err: unknown): Problem {
   const cause = err instanceof PhotoError ? err.cause : err;
   if (cause instanceof S3Error && cause.status === 403)
-    return 'Your sign-in stopped working. Sign out, sign in again, and send the card again.';
-  if (cause instanceof Error && ['NotReadableError', 'NotFoundError'].includes(cause.name))
-    return 'The card couldn’t be read. Make sure it’s still plugged in, then press Try again.';
-  if (cause instanceof Error && ['EncodingError', 'InvalidStateError'].includes(cause.name))
-    return `The photo ${(err as PhotoError).path} couldn’t be opened. Copy the card again, then press Try again.`;
-  return 'Sending stopped because the connection dropped. Check your internet, then press Try again.';
+    return { message: 'Your sign-in has stopped working. Sign in again to carry on.', signIn: true };
+  if (cause instanceof Error && cause.name === 'NotFoundError')
+    return { message: 'The card couldn’t be read. Make sure it’s still plugged in, then press Try again.' };
+  return { message: 'Sending stopped because the connection dropped. Check your internet, then press Try again.' };
 }
 
 function useWakeLock(active: boolean) {
   useEffect(() => {
     if (!active || !('wakeLock' in navigator)) return;
     let lock: WakeLockSentinel | undefined;
+    let asking = false;
+    let gone = false;
     const acquire = () => {
-      if (document.visibilityState === 'visible')
-        navigator.wakeLock.request('screen').then((l) => (lock = l), () => {});
+      if (asking || (lock && !lock.released) || document.visibilityState !== 'visible') return;
+      asking = true;
+      navigator.wakeLock.request('screen').then(
+        (l) => {
+          asking = false;
+          if (gone) void l.release();
+          else lock = l;
+        },
+        () => (asking = false),
+      );
     };
     acquire();
     document.addEventListener('visibilitychange', acquire);
     return () => {
+      gone = true;
       document.removeEventListener('visibilitychange', acquire);
       void lock?.release();
     };
@@ -47,9 +66,9 @@ function useLeaveWarning(active: boolean) {
   }, [active]);
 }
 
-export function Send({ session, lab, site, date, card, onDone }: Props) {
+export function Send({ session, lab, site, date, card, onDone, onSignIn }: Props) {
   const [progress, setProgress] = useState<Progress>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<Problem>();
   const [attempt, setAttempt] = useState(0);
   const reads = useRef(new Map<File, ReadResult>());
   const [now, setNow] = useState(performance.now());
@@ -109,13 +128,19 @@ export function Send({ session, lab, site, date, card, onDone }: Props) {
       {error ? (
         <>
           <p className="error" role="alert">
-            {error}
+            {error.message}
           </p>
           <div className="actions">
             <span />
-            <button className="primary" onClick={() => setAttempt((a) => a + 1)}>
-              Try again
-            </button>
+            {error.signIn ? (
+              <button className="primary" onClick={onSignIn}>
+                Sign in again
+              </button>
+            ) : (
+              <button className="primary" onClick={() => setAttempt((a) => a + 1)}>
+                Try again
+              </button>
+            )}
           </div>
         </>
       ) : (

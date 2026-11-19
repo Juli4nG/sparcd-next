@@ -50,8 +50,12 @@ async function jpeg(canvas: OffscreenCanvas, quality: number): Promise<[ArrayBuf
 
 async function derive(file: File): Promise<Derived> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const view = scaled(bitmap, bitmap.width, bitmap.height, 1600);
-  bitmap.close();
+  let view: OffscreenCanvas;
+  try {
+    view = scaled(bitmap, bitmap.width, bitmap.height, 1600);
+  } finally {
+    bitmap.close();
+  }
   const thumb = scaled(view, view.width, view.height, 320);
   const [[viewBytes, viewSha256], [thumbBytes, thumbSha256]] = await Promise.all([jpeg(view, 0.82), jpeg(thumb, 0.75)]);
   return { thumb: thumbBytes, thumbSha256, view: viewBytes, viewSha256 };
