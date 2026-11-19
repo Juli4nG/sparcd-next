@@ -124,7 +124,9 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const pending: Media[] = [];
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
       try {
-        bytes += await putPhoto(shards, photo, missing, pool);
+        // Awaited first: `bytes += await …` would read `bytes` before the other lanes add to it.
+        const sent = await putPhoto(shards, photo, missing, pool);
+        bytes += sent;
         pending.push(mediaRow(photo, deploymentID));
       } catch (err) {
         if (!photoProblem(err)) throw new PhotoError(photo.path, err);

@@ -31,6 +31,7 @@ export async function openShards(home: Bucket): Promise<Shards> {
           return await bucket.putObject(key, body, opts);
         } catch (err) {
           if (bucket === home) throw err;
+          if (!live.includes(bucket)) continue;
           live = live.filter((b) => b !== bucket);
           console.warn('upload endpoint dropped', bucket.endpoint, err);
         }
