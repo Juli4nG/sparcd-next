@@ -104,10 +104,7 @@ export async function loadShareCard(session: Session, url: string, endpoint: str
     photos: media.sort(byTime),
     tags: tagsFromRows(mine.filter((o) => views.has(o.mediaID))),
     own: false,
-    imageUrl: async (id, size) => {
-      const response = await get((size === 'thumb' ? thumbs : views).get(id)!);
-      return URL.createObjectURL(await response.blob());
-    },
+    imageUrl: async (id, size) => (size === 'thumb' ? thumbs : views).get(id)!,
   };
 }
 
