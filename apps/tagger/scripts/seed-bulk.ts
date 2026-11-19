@@ -23,6 +23,7 @@ import {
 
 const count = Number(process.argv[2] ?? 5000);
 const endpoint = process.env.SEED_ENDPOINT!;
+if (!['localhost', '127.0.0.1'].includes(new URL(endpoint).hostname)) throw new Error('seed-bulk writes test photos; point SEED_ENDPOINT at a local MinIO (localhost or 127.0.0.1).');
 const session = await signIn(
   { gate: false, endpoint, region: 'us-east-1', settingsBucket: 'sparcd-next-settings', bucketPrefix: 'sparcd-next-' },
   process.env.SEED_LOGIN!,

@@ -18,7 +18,8 @@ export type KeyContext = {
   displayed: Species[];
   searchInput: HTMLInputElement | null;
   modalOpen: boolean;
-  focusedHas: (tagKey: string) => boolean;
+  /** The one photo a tag would land on already has this species. */
+  targetHas: (tagKey: string) => boolean;
   setCountPrefix: (value: string) => void;
   captureKey: (own: string, key: string) => void;
   stopCapture: () => void;
@@ -28,6 +29,8 @@ export type KeyContext = {
   increment: (tag: PhotoTag) => void;
   move: (direction: 1 | -1) => void;
   clearSelection: () => void;
+  /** Ctrl+A: choose the shown photos of the focused photo's burst. */
+  selectBurst: () => void;
   openFocus: () => void;
   closeFocus: () => void;
   openCheatsheet: () => void;
@@ -38,7 +41,7 @@ export type KeyContext = {
 type Target = EventTarget | null;
 type Key = Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'repeat' | 'target' | 'preventDefault'>;
 
-const isTyping = (t: Target) => {
+export const isTyping = (t: Target) => {
   const el = t as HTMLElement | null;
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 };
@@ -62,7 +65,7 @@ export function applySpeciesBinding(s: KeyContext, key: string): boolean {
   const prefix = speciesCountFromPrefix(s.countPrefix);
   s.setCountPrefix('');
   const tag = speciesTag(action.species);
-  if (prefix && s.selectedCount <= 1 && !s.focusedHas(tag.key) && tag.observationType !== 'blank') s.apply({ ...tag, count: prefix });
+  if (prefix && s.selectedCount <= 1 && !s.targetHas(tag.key) && tag.observationType !== 'blank') s.apply({ ...tag, count: prefix });
   else s.increment(tag);
   return true;
 }
@@ -73,7 +76,8 @@ export function handleKey(e: Key, s: KeyContext): void {
   if (e.key === 'Shift' || e.key === 'Control') return;
 
   if (s.capturingFor) {
-    if (e.key === 'Escape') return s.stopCapture();
+    // Typing in a field is never a new key.
+    if (e.key === 'Escape' || isTyping(e.target)) return s.stopCapture();
     const key = normalizeBindableEventKey(e);
     if (!key) return;
     e.preventDefault();
@@ -126,7 +130,10 @@ export function handleKey(e: Key, s: KeyContext): void {
   }
   if (e.metaKey || e.ctrlKey) {
     const k = e.key.toLowerCase();
-    if (k === 'z' && !e.shiftKey) {
+    if (k === 'a') {
+      e.preventDefault();
+      s.selectBurst();
+    } else if (k === 'z' && !e.shiftKey) {
       e.preventDefault();
       s.undo();
     } else if (k === 's') {
@@ -148,7 +155,9 @@ export function handleKey(e: Key, s: KeyContext): void {
       return s.move(1);
     case ' ':
       e.preventDefault();
-      return s.searchInput?.focus();
+      // Shift+Space was "need expert" in the old Tagger; here it does nothing.
+      if (!e.shiftKey) s.searchInput?.focus();
+      return;
     case 'Enter':
       if (s.view === 'grid') {
         e.preventDefault();

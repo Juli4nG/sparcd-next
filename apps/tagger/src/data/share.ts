@@ -1,6 +1,6 @@
 import { instant, isMediaId, isPersonCode, parseTable, readTable, type Deployment, type PackageRows, type Session } from '@sparcd/bucket';
 import { byTime, isShared, type Card } from './card';
-import { tagState, tagsFromRows } from './tags';
+import { eventsFromRows, tagState, tagsFromRows } from './tags';
 
 export class LinkGone extends Error {}
 
@@ -99,10 +99,12 @@ export async function loadShareCard(session: Session, url: string, endpoint: str
 
   const mine = await readTable(session.bucket, 'observations');
   const views = new Map(media.map((m) => [m.mediaID, m.filePath]));
+  const observations = mine.filter((o) => views.has(o.mediaID));
   return {
     deployment: deployments[0],
     photos: media.sort(byTime),
-    tags: tagsFromRows(mine.filter((o) => views.has(o.mediaID))),
+    tags: tagsFromRows(observations),
+    events: eventsFromRows(observations),
     own: false,
     imageUrl: async (id, size) => (size === 'thumb' ? thumbs : views).get(id)!,
   };

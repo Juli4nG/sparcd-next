@@ -79,6 +79,7 @@ const search = page.getByLabel('Search species');
 for (const [name, modifier] of [['Ghost', 'Shift'], ['Rabbit (Desert Cottontail)', 'Control']]) {
   await search.fill(name);
   const row = page.getByTestId('species-panel').locator('div.group').filter({ hasText: name }).first();
+  await row.hover(); // the key buttons show on hover
   await row.getByRole('button', { name: /set key|change key/ }).click();
   await tap(modifier);
   await row.locator('kbd', { hasText: modifier }).waitFor();

@@ -60,6 +60,15 @@ export class Saver {
     return this.inFlight;
   }
 
+  /** Saves until nothing is left. False when a save fails; the failed photos stay queued. */
+  async drain(): Promise<boolean> {
+    while (this.busy) {
+      await this.flush();
+      if (this.failures) return false;
+    }
+    return true;
+  }
+
   dispose(): void {
     clearTimeout(this.timer);
   }

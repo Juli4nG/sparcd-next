@@ -45,7 +45,7 @@ afterAll(() => vi.unstubAllGlobals());
 describe('saving tags on a shared card', () => {
   it('decides ownership per photo, even when the shared card has the same id as one of the person\'s own', async () => {
     await savePackage(session.bucket, { deployments: () => [deployment('')], media: () => [mine] }, about);
-    const card: Card = { deployment: deployment('share:k3'), photos: [copied], tags: new Map(), own: false, imageUrl: async () => '' };
+    const card: Card = { deployment: deployment('share:k3'), photos: [copied], tags: new Map(), events: new Map(), own: false, imageUrl: async () => '' };
     await saveTags(session, about, card, [copied.mediaID], () => human, () => '2026-11-19T09:00:00-07:00');
     const own: Card = { ...card, deployment: deployment(''), photos: [mine], own: true };
     await saveTags(session, about, own, [mine.mediaID], () => human, () => '2026-11-19T09:00:00-07:00');

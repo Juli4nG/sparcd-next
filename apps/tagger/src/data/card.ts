@@ -20,7 +20,7 @@ import {
   type Session,
   type Species,
 } from '@sparcd/bucket';
-import { tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
+import { eventsFromRows, tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
 
 export type ImageSize = 'thumb' | 'view';
 
@@ -28,14 +28,17 @@ export type ImageSize = 'thumb' | 'view';
  * One card's photos and tags, as any tagging screen needs them. `own` is false
  * for a card copied in from a share: those photos aren't the person's, so the
  * owner's filePublic rule doesn't apply. `imageUrl` is where each photo's
- * derived images come from, so a share can sign its own.
+ * derived images come from, so a share can sign its own; `fresh` signs anew
+ * after an image failed to load. `events` keeps each photo's burst (eventID)
+ * when its tags are rewritten.
  */
 export type Card = {
   deployment: Deployment;
   photos: Media[];
   tags: Map<string, PhotoTag[]>;
+  events: Map<string, string>;
   own: boolean;
-  imageUrl: (mediaID: string, size: ImageSize) => Promise<string>;
+  imageUrl: (mediaID: string, size: ImageSize, fresh?: boolean) => Promise<string>;
 };
 
 export type CardSummary = { deployment: Deployment; photos: number; tagged: number; untagged: number };
@@ -71,12 +74,13 @@ const hour = () => Math.floor(Date.now() / 3_600_000);
 /** Hour-stable signed URLs, so `<img>` sources repeat within the hour and the browser cache hits. */
 export function bucketImages(bucket: Bucket): Card['imageUrl'] {
   const cache = new Map<string, { hour: number; url: Promise<string> }>();
-  return (mediaID, size) => {
+  return (mediaID, size, fresh) => {
     const key = size === 'thumb' ? thumbKey(mediaID) : viewKey(mediaID);
     const hit = cache.get(key);
-    if (hit?.hour === hour()) return hit.url;
-    const url = bucket.presignGet(key, { hourStable: true });
+    if (!fresh && hit?.hour === hour()) return hit.url;
+    const url = bucket.presignGet(key, { hourStable: !fresh });
     cache.set(key, { hour: hour(), url });
+    url.catch(() => cache.get(key)?.url === url && cache.delete(key));
     return url;
   };
 }
@@ -88,10 +92,12 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
   if (!deployment) return null;
   const photos = rows.media.filter((m) => m.deploymentID === deploymentID).sort(byTime);
   const ids = new Set(photos.map((m) => m.mediaID));
+  const observations = rows.observations.filter((o) => ids.has(o.mediaID));
   return {
     deployment,
     photos,
-    tags: tagsFromRows(rows.observations.filter((o) => ids.has(o.mediaID))),
+    tags: tagsFromRows(observations),
+    events: eventsFromRows(observations),
     own: !isShared(deployment),
     imageUrl: bucketImages(session.bucket),
   };
@@ -115,7 +121,7 @@ export async function saveTags(
   editedAt: (id: string) => string,
 ): Promise<void> {
   const media = new Map(card.photos.map((m) => [m.mediaID, m]));
-  const rows = ids.flatMap((id) => tagRows(media.get(id)!, toBucketTags(tagsOf(id)), session.code, { timestamp: editedAt(id) }));
+  const rows = ids.flatMap((id) => tagRows(media.get(id)!, toBucketTags(tagsOf(id)), session.code, { timestamp: editedAt(id), eventID: card.events.get(id) }));
   const copies = ids.map((id) => media.get(id)!).filter((m) => !isOwnRow(m) && tagsOf(m.mediaID).length);
   const rowChanges: Changes = {
     ...(copies.length && { deployments: (d: Deployment[]) => mergeDeployments(d, [card.deployment], 'insert') }),

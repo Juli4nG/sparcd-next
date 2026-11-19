@@ -58,7 +58,7 @@ export function FocusView({
           </button>
         </div>
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px]">
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_clamp(280px,32vw,400px)]">
         <div className="relative min-h-0 min-w-0 grid place-items-center p-4 overflow-hidden">
           <LargePhoto card={card} photo={photo} tagged={tagged} />
           {onPrev && (
@@ -80,10 +80,17 @@ export function FocusView({
 }
 
 function LargePhoto({ card, photo, tagged }: { card: Card; photo: Media; tagged: boolean }) {
-  const { url, failed } = useImageUrl(card, photo.mediaID, 'view');
+  const { url, failed, retry, onError } = useImageUrl(card, photo.mediaID, 'view');
   const [loaded, setLoaded] = useState<string>();
-  const [broken, setBroken] = useState<string>();
-  if (failed || (url && broken === url)) return <p className="text-[16px] text-warn">This photo didn't load. Check your internet connection, then try again.</p>;
+  if (failed)
+    return (
+      <p className="text-[16px] text-warn">
+        This photo didn't load.{' '}
+        <button onClick={retry} className="min-h-11 px-3 border border-rule text-ink underline">
+          Try again
+        </button>
+      </p>
+    );
   return (
     <>
       {url && (
@@ -92,7 +99,7 @@ function LargePhoto({ card, photo, tagged }: { card: Card; photo: Media; tagged:
             src={url}
             alt={photo.fileName}
             onLoad={() => setLoaded(url)}
-            onError={() => setBroken(url)}
+            onError={onError}
             className="block max-w-full max-h-[calc(100dvh-7rem)] object-contain select-none"
             draggable={false}
           />

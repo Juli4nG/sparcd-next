@@ -27,6 +27,7 @@ const GROUPS: { title: string; rows: Shortcut[] }[] = [
     rows: [
       { keys: ['Shift', 'click'], action: 'Choose a run of photos' },
       { keys: ['Ctrl', 'click'], action: 'Add or remove one photo' },
+      { keys: ['Ctrl', 'A'], action: 'Choose the photos taken with this one (within a minute of each other)' },
       { keys: ['Esc'], action: 'Clear the chosen photos' },
       { keys: ['Ctrl', 'Z'], action: 'Undo the last change' },
       { keys: ['?'], action: 'Show this list' },

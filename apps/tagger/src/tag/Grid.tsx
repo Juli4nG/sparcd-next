@@ -23,6 +23,7 @@ export function Grid({
   selected,
   summarize,
   onPick,
+  onFocusTile,
   onOpen,
 }: {
   card: Card;
@@ -32,6 +33,7 @@ export function Grid({
   selected: Set<number>;
   summarize: (tags: PhotoTag[]) => string;
   onPick: (index: number, mods: PickMods) => void;
+  onFocusTile: (index: number) => void;
   onOpen: (index: number) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,7 @@ export function Grid({
                   selected={selected.has(index)}
                   summarize={summarize}
                   onPick={onPick}
+                  onFocusTile={onFocusTile}
                   onOpen={onOpen}
                 />
               );
@@ -120,6 +123,7 @@ const Tile = memo(function Tile({
   selected,
   summarize,
   onPick,
+  onFocusTile,
   onOpen,
 }: {
   card: Card;
@@ -130,6 +134,7 @@ const Tile = memo(function Tile({
   selected: boolean;
   summarize: (tags: PhotoTag[]) => string;
   onPick: (index: number, mods: PickMods) => void;
+  onFocusTile: (index: number) => void;
   onOpen: (index: number) => void;
 }) {
   const state = tagState(tags);
@@ -146,6 +151,7 @@ const Tile = memo(function Tile({
         if (e.detail > 1) return;
         onPick(index, { shift: e.shiftKey, add: e.metaKey || e.ctrlKey });
       }}
+      onFocus={(e) => e.currentTarget.matches(':focus-visible') && onFocusTile(index)}
       onDoubleClick={(e) => !e.shiftKey && !e.metaKey && !e.ctrlKey && onOpen(index)}
       aria-current={active ? 'true' : undefined}
       aria-pressed={selected}
