@@ -178,7 +178,7 @@ function SitePicker({ sites, chosen, onPick }: { sites: Site[]; chosen?: Site; o
 function DatePicker({ date, guess, onPick }: { date: string; guess?: string; onPick: (d: string) => void }) {
   const [other, setOther] = useState(date !== daysAgo(0) && date !== daysAgo(1) && date !== guess ? date : '');
   const choice = (iso: string, label: string) => (
-    <button onClick={() => onPick(iso)} className={`${bigSecondary} w-full justify-between ${iso === date ? 'bg-mark' : ''}`}>
+    <button onClick={() => onPick(iso)} className={`${bigSecondary.replace('bg-panel ', iso === date ? 'bg-mark ' : 'bg-panel ')} w-full justify-between`}>
       <span>{label}</span>
       <span className="text-[20px] font-[400] text-inkSoft">{longDay(iso)}</span>
     </button>
