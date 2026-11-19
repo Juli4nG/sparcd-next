@@ -3,7 +3,7 @@ import { validPreparedSpecies } from '@sparcd/flip';
 import { safeReturnUrl } from './lib/siblings';
 import { useEffect, useRef } from 'react';
 import { useOnline, Connection, loadPersistedConnection } from '@sparcd/auth-ui';
-import { testConnection } from '@sparcd/s3-safe';
+import { testSignIn } from './lib/next';
 import { useStore } from './store';
 import { Chrome } from './components/Chrome';
 import { Browse } from './sections/Browse';
@@ -21,7 +21,7 @@ const devEndpoint = import.meta.env.VITE_SPARCD_S3_ENDPOINT as string | undefine
 // prior connection, if any — the secret itself is never persisted, so the
 // user always retypes it. Read once; a dev endpoint override wins if set.
 const persistedConnection = loadPersistedConnection();
-const connectPrefill = { ...persistedConnection, ...(devEndpoint ? { endpoint: devEndpoint } : {}) };
+void persistedConnection; void devEndpoint;
 
 export function App() {
   const online = useOnline();
@@ -70,9 +70,9 @@ export function App() {
     return (
       <Connection
         toolName="Tagger"
-        initialConfig={connectPrefill}
+        initialConfig={{ endpoint: location.origin }}
         onConnect={connect}
-        onTestConnection={(config, signal) => testConnection(config, { signal })}
+        onTestConnection={(config) => testSignIn(config)}
       />
     );
   }

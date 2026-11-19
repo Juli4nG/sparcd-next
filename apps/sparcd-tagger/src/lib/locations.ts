@@ -18,6 +18,9 @@ import type { Deployment } from '@sparcd/camtrap';
 import { getClient, parseCollectionKey, translateReadError } from './s3';
 
 /** Exact object key, relative to the settings bucket. */
+import { currentSession } from './next';
+import { parseSites } from '@sparcd/bucket';
+
 export const LOCATIONS_KEY = 'Settings/locations.json';
 
 /** One entry as it appears on disk. */
@@ -234,6 +237,11 @@ export async function fetchLocations(
   collectionKey?: string | null,
   client = getClient(cfg),
 ): Promise<LocationsResult> {
+  // SPARC'd Next: the lab's sites.csv in the settings bucket.
+  const settings = currentSession().settings;
+  const sites = parseSites((await settings.getText('sites.csv')) ?? '');
+  const raw: RawLocation[] = sites.map((x) => ({ nameProperty: x.locationName, idProperty: x.locationID, latProperty: x.latitude, lngProperty: x.longitude, elevationProperty: 0 }));
+  if (raw) return { ...parseLocations(JSON.stringify(raw)), settingsBucket: settings.name, sourceBucket: settings.name, sourceKey: 'sites.csv' };
   if (collectionKey) {
     const { bucket, uuid } = parseCollectionKey(collectionKey);
     const collectionKeyPath = `Collections/${uuid}/locations.json`;

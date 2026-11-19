@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { extractCollectedDate } from '../lib/collectedDate';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useStore } from '../store';
@@ -77,6 +77,12 @@ export function Browse() {
   const [uploadFilter, setUploadFilter] = useState('');
 
   const collection = collections.data?.find((c) => c.key === collectionKey);
+
+  // SPARC'd Next has one collection, the person's own photos: open it straight away.
+  const onlyCollection = collections.data?.length === 1 ? collections.data[0].key : null;
+  useEffect(() => {
+    if (!collectionKey && onlyCollection) selectCollection(onlyCollection);
+  }, [collectionKey, onlyCollection, selectCollection]);
 
   const shownCollections = useMemo(() => {
     const q = filter.trim().toLowerCase();

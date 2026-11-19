@@ -18,6 +18,7 @@ import { parseUploadMeta, parseDeployments, type Deployment } from '@sparcd/camt
 import { sha256Hex } from './hash';
 import { originalBaselinePrefixOf, type CanonicalState, type SyncIO, type SnapshotManifest } from './sync';
 import type { SyncJournal, CanonicalRole } from './syncJournal';
+import { COLLECTION_UUID, currentSession, deploymentOf, packageRows, presignMedia, saveObservations, uploadFiles, uploadPrefixOf } from './next';
 
 // Not a security boundary in a static app — the wrapper just requires an
 // explicit scope. The connected key's IAM policy and bucket CORS gate access.
@@ -62,9 +63,13 @@ export function getWriteClient(cfg: S3Config): SafeS3Client {
 
 export { parseCollectionKey, type CollectionRef };
 
-export function listCollections(cfg: S3Config): Promise<CollectionRef[]> {
-  return listCollectionsWith(getClient(cfg));
+// SPARC'd Next: the person's own bucket is the one collection.
+export async function listCollections(_cfg: S3Config): Promise<CollectionRef[]> {
+  const session = currentSession();
+  const bucket = session.bucket.name;
+  return [{ key: `${bucket}::${COLLECTION_UUID}`, bucket, uuid: COLLECTION_UUID, name: `Photos from ${session.name}`, organization: null, contact: null, description: null }];
 }
+void listCollectionsWith;
 
 // --- Uploads + images within a collection ----------------------------------
 
@@ -79,31 +84,16 @@ export type UploadRef = {
  * Blobs and CSVs from an interrupted run remain in storage for recovery, but
  * must not become a Browse row or a selectable tagging workspace.
  */
-export async function listUploads(cfg: S3Config, bucket: string, uuid: string): Promise<UploadRef[]> {
-  const client = getClient(cfg);
-  const dirs = await client.listCommonPrefixes(bucket, `Collections/${uuid}/Uploads/`);
-  const visible: (string | null)[] = [];
-  for (let i = 0; i < dirs.length; i += UPLOAD_MARKER_CONCURRENCY) {
-    const chunk = dirs.slice(i, i + UPLOAD_MARKER_CONCURRENCY);
-    visible.push(
-      ...(await Promise.all(
-        chunk.map(async (prefix) => {
-          try {
-            await client.statObject(bucket, `${prefix}UploadMeta.json`);
-            return prefix;
-          } catch (err) {
-            if (isNotFound(err)) return null;
-            throw translateReadError(err, 'UploadMeta.json');
-          }
-        }),
-      )),
-    );
-  }
-  return visible
-    .filter((prefix): prefix is string => prefix !== null)
-    .map((prefix) => ({ prefix, stamp: prefix.replace(/\/$/, '').split('/').pop() ?? prefix }))
-    .sort((a, b) => b.stamp.localeCompare(a.stamp)); // newest stamp first
+// SPARC'd Next: one upload per card (deployment), newest first.
+export async function listUploads(_cfg: S3Config, _bucket: string, _uuid: string): Promise<UploadRef[]> {
+  const rows = await packageRows();
+  return rows.deployments
+    .filter((d) => !/(^|\|)\s*share:/.test(d.deploymentGroups ?? ''))
+    .sort((a, b) => (b.deploymentEnd ?? '').localeCompare(a.deploymentEnd ?? ''))
+    // Browse reads the stamp as `YYYY.MM.DD.HH.MM.SS_<who>`: the card's last photo time and its owner.
+    .map((d) => ({ prefix: uploadPrefixOf(d.deploymentID), stamp: `${(d.deploymentEnd ?? '').slice(0, 19).replace(/[-T:]/g, '.')}_${currentSession().name}` }));
 }
+void UPLOAD_MARKER_CONCURRENCY;
 
 // A cheap per-upload summary for the Browse list: the canonical tally from
 // `UploadMeta.json` (image count + how many already carry a species) plus the
@@ -120,43 +110,19 @@ export type UploadSummary = {
 };
 
 export async function loadUploadSummary(
-  cfg: S3Config,
-  bucket: string,
+  _cfg: S3Config,
+  _bucket: string,
   uploadPrefix: string,
 ): Promise<UploadSummary> {
-  const client = getClient(cfg);
-  const decode = (b: Uint8Array): string => new TextDecoder().decode(b);
-
-  let meta;
-  try {
-    meta = parseUploadMeta(decode(await client.getObject(bucket, `${uploadPrefix}${CANONICAL_FILE.uploadMeta}`)));
-  } catch (err) {
-    throw translateReadError(err, 'UploadMeta.json');
-  }
-
-  // The location label is secondary — a missing or unreadable `deployments.csv`
-  // must not blank an otherwise-good row, so it degrades to no label.
-  let deployments: DeploymentLabel[] = [];
-  try {
-    const rows = parseDeployments(decode(await client.getObject(bucket, `${uploadPrefix}deployments.csv`)));
-    const seen = new Map<string, DeploymentLabel>();
-    for (const d of rows) {
-      const name = d.locationName.trim();
-      if (!name) continue;
-      const key = `${name}\u0000${d.locationId}`;
-      if (!seen.has(key)) seen.set(key, { name, locationId: d.locationId });
-    }
-    deployments = [...seen.values()];
-  } catch {
-    // No deployment label for this row.
-  }
-
+  const files = await uploadFiles(uploadPrefix);
+  const meta = parseUploadMeta(files.uploadMeta);
+  const d = parseDeployments(files.deployments)[0];
   return {
     imageCount: meta.imageCount,
     imagesWithSpecies: meta.imagesWithSpecies,
     uploadUser: meta.uploadUser,
     description: meta.description,
-    deployments,
+    deployments: d ? [{ name: d.locationName, locationId: d.locationId }] : [],
   };
 }
 
@@ -166,19 +132,11 @@ export async function loadUploadSummary(
  *  location on file" instead of throwing. Distinct from `loadCanonicalState`,
  *  which grounds the sync base — this is read-only, UI-display plumbing. */
 export async function loadCurrentDeployment(
-  cfg: S3Config,
-  bucket: string,
+  _cfg: S3Config,
+  _bucket: string,
   uploadPrefix: string,
 ): Promise<Deployment | null> {
-  const client = getClient(cfg);
-  try {
-    const rows = parseDeployments(
-      new TextDecoder().decode(await client.getObject(bucket, `${uploadPrefix}${CANONICAL_FILE.deployments}`)),
-    );
-    return rows[0] ?? null;
-  } catch {
-    return null;
-  }
+  return parseDeployments((await uploadFiles(uploadPrefix)).deployments)[0] ?? null;
 }
 
 export type UploadImage = {
@@ -194,25 +152,24 @@ const IMAGE_EXT = /\.(jpe?g|mp4)$/i;
 
 /** List the taggable images under an upload prefix (sparcd-web `get_s3_images` parity). */
 export async function listUploadImages(
-  cfg: S3Config,
-  bucket: string,
+  _cfg: S3Config,
+  _bucket: string,
   uploadPrefix: string,
 ): Promise<UploadImage[]> {
-  const client = getClient(cfg);
-  const images: UploadImage[] = [];
-  for await (const obj of client.listObjects(bucket, uploadPrefix)) {
-    if (!IMAGE_EXT.test(obj.key)) continue;
-    images.push({ key: obj.key, fileName: obj.key.split('/').pop() ?? obj.key, size: obj.size });
-  }
-  return images.sort((a, b) => a.key.localeCompare(b.key));
+  const rows = await packageRows();
+  const id = deploymentOf(uploadPrefix);
+  return rows.media.filter((m) => m.deploymentID === id)
+    .map((m) => ({ key: m.filePath, fileName: m.fileName ?? '', size: 0 }))
+    .filter((m) => IMAGE_EXT.test(m.key));
 }
 
 const THUMB_TTL_SEC = 60 * 60; // 1h presigned GET, plenty for a tagging session
 
 /** A presigned GET URL an `<img>` can render directly (no canvas/CORS needs). */
-export function presignImage(cfg: S3Config, bucket: string, key: string): Promise<string> {
-  return getClient(cfg).presignedGet(bucket, key, THUMB_TTL_SEC);
+export function presignImage(_cfg: S3Config, _bucket: string, key: string, size: 'thumb' | 'view' = 'view'): Promise<string> {
+  return presignMedia(key, size);
 }
+void THUMB_TTL_SEC;
 
 // --- Canonical Camtrap state (the Tag workspace base + sync ground) ----------
 
@@ -301,24 +258,21 @@ async function loadObject(cfg: S3Config, bucket: string, key: string, what: stri
  *  `loadUploadSummary`'s same tolerance) — so a missing/unreadable one grounds
  *  as an empty file rather than failing the whole workspace load. A location
  *  correction on such an upload writes a brand-new `deployments.csv`. */
+// SPARC'd Next: the files are generated from the package, and each file's
+// "ETag" is its own hash, so an unchanged package grounds the same way twice.
 export async function loadCanonicalState(
-  cfg: S3Config,
-  bucket: string,
+  _cfg: S3Config,
+  _bucket: string,
   uploadPrefix: string,
 ): Promise<CanonicalState> {
+  const files = await uploadFiles(uploadPrefix);
+  const file = async (text: string) => { const hash = await sha256Hex(text); return { text, etag: hash, hash }; };
   const [media, observations, deployments, uploadMeta] = await Promise.all([
-    loadObject(cfg, bucket, `${uploadPrefix}${CANONICAL_FILE.media}`, 'media.csv'),
-    loadObject(cfg, bucket, `${uploadPrefix}${CANONICAL_FILE.observations}`, 'observations.csv'),
-    loadObjectRaw(cfg, bucket, `${uploadPrefix}${CANONICAL_FILE.deployments}`).catch(
-      async (err) => {
-        if (!isNotFound(err)) throw translateReadError(err, 'deployments.csv');
-        return { text: '', etag: '', hash: await sha256Hex('') };
-      },
-    ),
-    loadObject(cfg, bucket, `${uploadPrefix}${CANONICAL_FILE.uploadMeta}`, 'UploadMeta.json'),
+    file(files.media), file(files.observations), file(files.deployments), file(files.uploadMeta),
   ]);
   return { media, observations, deployments, uploadMeta };
 }
+void loadObject;
 
 // --- Snapshots (P5 recovery source) ----------------------------------------
 
@@ -360,6 +314,7 @@ export async function listSnapshots(
   bucket: string,
   uploadPrefix: string,
 ): Promise<SnapshotRef[]> {
+  return [];
   const client = getClient(cfg);
   const root = `${uploadPrefix}${SNAPSHOTS_DIR}`;
   let userDirs: string[];
@@ -410,6 +365,7 @@ export async function listCollectionSnapshots(
   bucket: string,
   uuid: string,
 ): Promise<UploadSnapshots[]> {
+  return [];
   const uploads = await listUploads(cfg, bucket, uuid);
   const out = await Promise.all(
     uploads.map(async (u) => {
@@ -563,25 +519,29 @@ export async function loadSnapshotBodies(
  * lazily *inside* the write closures, so a dry-run (which calls neither
  * `writeSnapshot` nor `replace`) never even constructs a write-capable client.
  */
+// SPARC'd Next: only observations.csv carries the person's edits; it becomes
+// one package save. The other files are derived from the package, so their
+// writes are accepted and dropped, and there are no snapshots or baselines.
 export function makeSyncIO(
-  cfg: S3Config,
-  bucket: string,
+  _cfg: S3Config,
+  _bucket: string,
   uploadPrefix: string,
   journal: { save: (j: SyncJournal) => Promise<void>; clear: () => Promise<void> },
 ): SyncIO {
   return {
-    loadCanonical: () => loadCanonicalState(cfg, bucket, uploadPrefix),
-    ensureOriginalBaseline: (current) => ensureOriginalBaseline(cfg, bucket, uploadPrefix, current),
-    writeSnapshot: async (key, body, contentType) => {
-      await getWriteClient(cfg).writeImmutable(bucket, key, body, { contentType });
+    loadCanonical: () => loadCanonicalState(_cfg, _bucket, uploadPrefix),
+    ensureOriginalBaseline: async () => {},
+    writeSnapshot: async () => {},
+    replace: async (key, body) => {
+      if (key.endsWith('/observations.csv')) await saveObservations(uploadPrefix, body);
+      return { etag: await sha256Hex(body) };
     },
-    replace: (key, body, etag, contentType) =>
-      getWriteClient(cfg).replaceIfUnchanged(bucket, key, body, { etag, contentType }),
     saveJournal: journal.save,
     clearJournal: journal.clear,
     now: () => new Date(),
   };
 }
+void ensureOriginalBaseline;
 
 // --- Error translation -----------------------------------------------------
 // The read-error → message mapping (including the static-app CORS case) lives

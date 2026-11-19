@@ -18,6 +18,8 @@ import {
   type LoginIdentityPreference,
 } from '@sparcd/auth-ui';
 import { clearClientCache } from './lib/s3';
+import { currentSession, forget } from './lib/next';
+import { signOut } from '@sparcd/bucket';
 import { localBatchId } from './lib/localBatch';
 import type { DateFormat, TimeFormat } from './lib/formatting';
 
@@ -318,6 +320,8 @@ export const useStore = create<TaggerState>()(
       if (!connectionChangeAllowed(null)) return;
       clearClientCache();
       clearSharedConnection();
+      forget();
+      signOut();
       clearAutoAdvance();
       clearSortSpeciesByRecent();
       clearLocalBatchIdentity();
@@ -382,7 +386,9 @@ export const useStore = create<TaggerState>()(
         identityResolutionError: null,
       });
       try {
-        const result = await fetchWhoAmI(s3Config);
+        // SPARC'd Next: the gate's whoami already named this person at sign-in.
+        const result: { kind: 'found' | 'unsupported'; name: string } = { kind: 'found', name: currentSession().code };
+        void fetchWhoAmI;
         const current = get();
         if (requestGeneration !== identityLookupGeneration || current.connectionId !== connectionId || current.s3Config?.accessKey.trim() !== login) return;
         const identity = result.kind === 'unsupported' ? login : result.name;
