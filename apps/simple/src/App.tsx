@@ -11,7 +11,7 @@ import { loadConfig, restoreSession, signOut, type About, type Config, type Sess
 import logo from '../../../packages/auth-ui/src/assets/sparcd.png';
 import { loadCard, loadSettings, type Card } from './data/card';
 import { saveEverything, unsavedEdits, useTagging } from './data/useTagging';
-import { cardTitle } from './dates';
+import { deploymentLine } from './cardLine';
 import { Home } from './Home';
 import { SendFlow } from './SendFlow';
 import { SimpleTag } from './tag/Simple';
@@ -168,7 +168,7 @@ function CardPage({ session, cardId }: { session: Session; cardId: string }) {
 
 function CardScreen({ session, about, species, card }: { session: Session; about: About; species: Species[]; card: Card }) {
   const tagging = useTagging(session, about, card);
-  return <SimpleTag session={session} species={species} card={card} title={cardTitle(card.deployment)} tagging={tagging} />;
+  return <SimpleTag session={session} species={species} card={card} title={deploymentLine(card.deployment)} tagging={tagging} />;
 }
 
 function Leaving({ failed, onRetry, onLeave }: { failed: boolean; onRetry: () => void; onLeave: () => void }) {

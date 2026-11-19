@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { readPackage, type Session } from '@sparcd/bucket';
 import { cardSummaries, type CardSummary } from './data/card';
-import { cardTitle } from './dates';
+import { deploymentLine, rangeOf } from './cardLine';
 import { PawStamp } from './ui/Paw';
 import { focusRing, press } from './ui/look';
 
@@ -9,12 +9,7 @@ const ALL = '';
 
 /** "Juniper Draw" from a card; the site filter's key. */
 const siteOf = (c: CardSummary) => c.deployment.locationName || c.deployment.locationID || '';
-/** A card's projects: its deploymentGroups, split on "|". */
-const projectsOf = (c: CardSummary) =>
-  (c.deployment.deploymentGroups ?? '')
-    .split('|')
-    .map((g) => g.trim())
-    .filter(Boolean);
+const rangeOfCard = (c: CardSummary) => rangeOf(c.deployment.deploymentGroups);
 
 const tagHref = (c: CardSummary) => `#card=${encodeURIComponent(c.deployment.deploymentID)}`;
 
@@ -22,7 +17,7 @@ export function Home({ session }: { session: Session }) {
   const [cards, setCards] = useState<CardSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [site, setSite] = useState(ALL);
-  const [project, setProject] = useState(ALL);
+  const [range, setRange] = useState(ALL);
 
   useEffect(() => {
     readPackage(session.bucket).then(
@@ -32,9 +27,9 @@ export function Home({ session }: { session: Session }) {
   }, [session]);
 
   const sites = useMemo(() => [...new Set((cards ?? []).map(siteOf))].filter(Boolean).sort(), [cards]);
-  const projects = useMemo(() => [...new Set((cards ?? []).flatMap(projectsOf))].sort(), [cards]);
+  const ranges = useMemo(() => [...new Set((cards ?? []).map(rangeOfCard))].filter(Boolean).sort(), [cards]);
   const waiting = (cards ?? []).filter((c) => c.untagged > 0);
-  const shown = waiting.filter((c) => (site === ALL || siteOf(c) === site) && (project === ALL || projectsOf(c).includes(project)));
+  const shown = waiting.filter((c) => (site === ALL || siteOf(c) === site) && (range === ALL || rangeOfCard(c) === range));
   const left = waiting.reduce((n, c) => n + c.untagged, 0);
 
   return (
@@ -63,10 +58,10 @@ export function Home({ session }: { session: Session }) {
             <h1 id="to-tag" className="font-display text-[28px] font-[600] text-ink">
               Photos to tag
             </h1>
-            {(sites.length > 1 || projects.length > 1) && (
+            {(sites.length > 1 || ranges.length > 1) && (
               <div className="flex flex-wrap gap-3">
                 {sites.length > 1 && <Filter label="Site" all="All sites" value={site} options={sites} onChange={setSite} />}
-                {projects.length > 1 && <Filter label="Project" all="All projects" value={project} options={projects} onChange={setProject} />}
+                {ranges.length > 1 && <Filter label="Range" all="All ranges" value={range} options={ranges} onChange={setRange} />}
               </div>
             )}
           </div>
@@ -95,7 +90,7 @@ export function Home({ session }: { session: Session }) {
                     className={`flex items-center gap-6 px-5 py-4 bg-panel border border-rule hover:border-ink hover:bg-panelHover ${focusRing}`}
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[22px] font-[600] text-ink">{cardTitle(c.deployment)}</span>
+                      <span className="block text-[21px] leading-snug font-[600] text-ink">{deploymentLine(c.deployment, c.photos)}</span>
                       <span className="block text-[18px] text-inkSoft">
                         {c.untagged.toLocaleString()} of {c.photos.toLocaleString()} left to tag
                       </span>
@@ -150,10 +145,9 @@ function Sent({ cards }: { cards: CardSummary[] }) {
       <table className="mt-3 w-full text-left text-[17px]">
         <thead className="text-inkMute text-[15px]">
           <tr className="border-b border-ruleSoft">
-            <th className="py-2 pr-4 font-[500]">Site and day</th>
+            <th className="py-2 pr-4 font-[500]">Card</th>
             <th className="py-2 pr-4 font-[500] text-right">Photos</th>
-            <th className="py-2 pr-4 font-[500] text-right">Tagged</th>
-            <th className="py-2 font-[500]">Project</th>
+            <th className="py-2 font-[500] text-right">Tagged</th>
           </tr>
         </thead>
         <tbody>
@@ -161,12 +155,11 @@ function Sent({ cards }: { cards: CardSummary[] }) {
             <tr key={c.deployment.deploymentID} className="border-b border-ruleSoft">
               <td className="py-2.5 pr-4">
                 <a href={tagHref(c)} className={`text-ink underline underline-offset-4 decoration-ruleSoft hover:decoration-ink ${focusRing}`}>
-                  {cardTitle(c.deployment)}
+                  {deploymentLine(c.deployment)}
                 </a>
               </td>
               <td className="py-2.5 pr-4 text-right tabular-nums">{c.photos.toLocaleString()}</td>
-              <td className="py-2.5 pr-4 text-right tabular-nums">{c.tagged.toLocaleString()}</td>
-              <td className="py-2.5 text-inkSoft">{projectsOf(c).join(', ')}</td>
+              <td className="py-2.5 text-right tabular-nums">{c.tagged.toLocaleString()}</td>
             </tr>
           ))}
         </tbody>
