@@ -99,6 +99,7 @@ export function App() {
         date={date}
         card={card}
         onDone={(o) => (setOutcome(o), setStep('done'))}
+        onSignIn={() => (signOut(), setSession(null), setStep('card'))}
       />
     );
   else if (step === 'done') body = <Done outcome={outcome!} onAnother={startOver} />;

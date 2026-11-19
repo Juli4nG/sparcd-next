@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { scanDrop, scanFileList, type CardFile } from '../lib/scan';
 import { count } from '../lib/words';
 
@@ -7,14 +7,24 @@ type Props = { card: CardFile[]; onCard: (c: CardFile[]) => void; onBack: () => 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 export function ChooseCard({ card, onCard, onBack, onNext }: Props) {
-  const [state, setState] = useState<'idle' | 'looking' | 'empty'>('idle');
+  const [state, setState] = useState<'idle' | 'looking' | 'empty' | 'failed'>('idle');
   const [over, setOver] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  const latest = useRef(0);
 
   const take = async (found: Promise<CardFile[]> | CardFile[]) => {
+    const scan = ++latest.current;
     setState('looking');
-    const files = [...(await found)].sort((a, b) => collator.compare(a.path, b.path));
-    onCard(files);
-    setState(files.length ? 'idle' : 'empty');
+    try {
+      const files = [...(await found)].sort((a, b) => collator.compare(a.path, b.path));
+      if (scan !== latest.current) return;
+      onCard(files);
+      setState(files.length ? 'idle' : 'empty');
+    } catch {
+      if (scan !== latest.current) return;
+      onCard([]);
+      setState('failed');
+    }
   };
 
   const drop = (e: DragEvent) => {
@@ -32,21 +42,26 @@ export function ChooseCard({ card, onCard, onBack, onNext }: Props) {
         onDragLeave={() => setOver(false)}
         onDrop={drop}
       >
-        <label className="button big">
+        <button className="big" onClick={() => picker.current!.click()}>
           Choose the card
-          <input
-            type="file"
-            hidden
-            // @ts-expect-error webkitdirectory is not in React's input attributes
-            webkitdirectory=""
-            onChange={(e) => e.target.files && void take(scanFileList(e.target.files))}
-          />
-        </label>
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input attributes
+          webkitdirectory=""
+          onChange={(e) => {
+            if (e.target.files) void take(scanFileList(e.target.files));
+            e.target.value = '';
+          }}
+        />
         <p className="quiet">or drag the card’s folder here</p>
       </div>
       <p className="status" aria-live="polite">
         {state === 'looking' && 'Looking for photos…'}
         {state === 'empty' && 'No photos found there. Choose the card’s folder.'}
+        {state === 'failed' && 'We couldn’t read that card. Check it’s plugged in, then choose it again.'}
         {state === 'idle' && card.length > 0 && `${count(card.length, 'photo')} found`}
       </p>
       <div className="actions">
