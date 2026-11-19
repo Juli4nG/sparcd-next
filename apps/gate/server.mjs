@@ -19,7 +19,7 @@ import {
 } from './rules.mjs';
 import { buildListing, decodeListingToken, listAroundAccess } from './listing.mjs';
 import { makePeople, loadMasterKey } from './people.mjs';
-import { makeUpstream, normalizeIfMatch } from './upstream.mjs';
+import { makeUpstream, normalizeIfMatch, loadDataKey } from './upstream.mjs';
 
 // Ordinary headers that may travel upstream, and only when the caller signed
 // them. `range` on a GET is the one exception, in proxyFetch.
@@ -52,6 +52,7 @@ export function configFromEnv(env = process.env) {
     accessKeyId: env.S3_ACCESS_KEY_ID,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     masterKey: env.ACCESS_MASTER_KEY,
+    dataKey: env.DATA_KEY,
     settingsBucket: env.SETTINGS_BUCKET,
     allow: env.BUCKET_ALLOW,
     allowedHosts: env.ALLOWED_HOSTS,
@@ -102,6 +103,7 @@ export async function createGate(input) {
     region: config.region,
     accessKeyId: config.accessKeyId,
     secretAccessKey: config.secretAccessKey,
+    dataKey: loadDataKey(config.dataKey),
   });
   const people = makePeople({
     upstream,

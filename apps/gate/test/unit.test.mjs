@@ -16,7 +16,7 @@ import {
 import { afterTree, decodeListingToken, encodeListingToken, listAroundAccess } from '../listing.mjs';
 import { loadMasterKey, wrapSecret, unwrapSecret, newPassword } from '../people.mjs';
 import { WORDS } from '../words.mjs';
-import { normalizeIfMatch } from '../upstream.mjs';
+import { normalizeIfMatch, bucketKeyHeaders, makeUpstream } from '../upstream.mjs';
 import { createGate } from '../server.mjs';
 import { openAdmin } from '../cli.mjs';
 
@@ -26,9 +26,31 @@ const aws = new AwsClient({ ...KEY, service: 's3', region: 'us-east-1' });
 
 test('server and CLI reject settings buckets that a person could own or outside the prefix', async () => {
   for (const settingsBucket of ['lab-settings', 'sparcd-next-ana']) {
-    await assert.rejects(createGate({ settingsBucket, allow: '*' }), /SETTINGS_BUCKET/);
+    await assert.rejects(createGate({ settingsBucket, allow: '*', dataKey: 'none' }), /SETTINGS_BUCKET/);
     assert.throws(() => openAdmin({ SETTINGS_BUCKET: settingsBucket, BUCKET_ALLOW: '*' }), /SETTINGS_BUCKET/);
   }
+});
+
+test('object requests carry a key made for their bucket; listings carry none; plain http is refused', async (t) => {
+  const dataKey = Buffer.alloc(32, 7);
+  const md5 = (bucket) => bucketKeyHeaders(dataKey, bucket)['x-amz-server-side-encryption-customer-key-md5'];
+  const seen = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (req) => {
+    const url = new URL(req.url);
+    seen.push([req.method, url.pathname + url.search, req.headers.get('x-amz-server-side-encryption-customer-key-md5')]);
+    return new Response('', { status: 200, headers: { etag: '"e"' } });
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const options = { endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey };
+  const up = makeUpstream(options);
+  await up.send(up.url('sparcd-next-ana', 'Media/x/thumb.jpg'));
+  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: Buffer.from('x') });
+  await up.put('sparcd-next-settings', 'lab.json', '{}');
+  await up.listPage('sparcd-next-ana', { prefix: 'Media/' });
+  assert.deepEqual(seen.map(([, , m]) => m), [md5('sparcd-next-ana'), md5('sparcd-next-ana'), md5('sparcd-next-settings'), null]);
+  assert.notEqual(md5('sparcd-next-ana'), md5('sparcd-next-ben'));
+  assert.throws(() => makeUpstream({ ...options, endpoint: 'http://objects.example.org' }), /https/);
 });
 
 test('gate HTTP requests and responses', async (t) => {
@@ -59,7 +81,7 @@ test('gate HTTP requests and responses', async (t) => {
     upstream.close(resolve);
   }));
   const gate = await createGate({
-    ...KEY, masterKey, upstream: `http://127.0.0.1:${upstream.address().port}`,
+    ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
     allowedHosts: 'gate.test', log: () => {},
   });
   t.after(() => gate.close());
@@ -90,6 +112,11 @@ test('gate HTTP requests and responses', async (t) => {
       req.end(body);
     });
   };
+
+  await t.test('a client cannot send a storage key of its own', async () => {
+    const sent = await call(media, { headers: { 'x-amz-server-side-encryption-customer-algorithm': 'AES256' } });
+    assert.equal(sent.status, 403);
+  });
 
   await t.test('removed operations and a plain bucket GET return 403', async () => {
     for (const [method, path] of [

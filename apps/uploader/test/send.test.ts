@@ -10,7 +10,7 @@ vi.mock('../src/lib/pool', () => ({
     read: async (file: File) => ({ sha256: sha(file.name), dateTimeOriginal: '2026:11:17 10:00:00' }),
     derive: async (file: File) => {
       if (file.name === 'BAD.JPG') throw Object.assign(new Error('The source image could not be decoded.'), { name: 'InvalidStateError' });
-      return { thumb: new ArrayBuffer(1), thumbSha256: 't', view: new ArrayBuffer(1), viewSha256: 'v' };
+      return { thumb: new ArrayBuffer(1), thumbSha256: 't', view: new ArrayBuffer(1), viewSha256: 'v', original: new ArrayBuffer(1), originalSha256: 'o' };
     },
     close: () => {},
   }),

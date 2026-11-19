@@ -161,15 +161,18 @@ export async function sendCard(job: Job): Promise<Outcome> {
   }
 }
 
-/** Thumb and view come first, so a photo that can't be decoded never has its original stored. */
+/**
+ * Every file is made before any is stored, so a photo that can't be decoded
+ * never has its original stored. The original goes up without its camera data.
+ */
 async function putPhoto(session: Session, photo: Photo, missing: string[], pool: Pool) {
   const keys = keysOf(photo);
-  const put = (key: string, body: Blob | Uint8Array<ArrayBuffer>, sha256: string) =>
-    session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256 });
-  const derived = missing.includes('thumb') || missing.includes('view') ? await pool.derive(photo.file) : undefined;
+  const put = (key: string, body: ArrayBuffer, sha256: string) =>
+    session.bucket.putObject(key, new Uint8Array(body), { contentType: 'image/jpeg', sha256 });
+  const d = await pool.derive(photo.file);
   await Promise.all([
-    derived && missing.includes('thumb') && put(keys.thumb, new Uint8Array(derived.thumb), derived.thumbSha256),
-    derived && missing.includes('view') && put(keys.view, new Uint8Array(derived.view), derived.viewSha256),
-    missing.includes('original') && put(keys.original, photo.file, photo.mediaID),
+    missing.includes('thumb') && put(keys.thumb, d.thumb, d.thumbSha256),
+    missing.includes('view') && put(keys.view, d.view, d.viewSha256),
+    missing.includes('original') && put(keys.original, d.original, d.originalSha256),
   ]);
 }

@@ -22,7 +22,7 @@ datapackage.json
 deployments.csv
 media.csv
 observations.csv
-Media/<sha256>/<original file name>   the photo as it came off the card, EXIF intact
+Media/<sha256>/<original file name>   the photo without its camera data (see below)
 Media/<sha256>/thumb.jpg              320 px long side, no EXIF
 Media/<sha256>/view.jpg               1600 px long side, no EXIF
 shares.json                           share recipes (sharing only)
@@ -88,7 +88,7 @@ juniper-draw,Juniper Draw,31.84213,-110.61942,area:East Range
 | ID | rule | example |
 | --- | --- | --- |
 | person code | `^[a-z][a-z0-9]{1,19}$`. `settings`, `gate` and `admin` are reserved | `ana` |
-| `mediaID` | lowercase hex SHA-256 of the original file's bytes | `9f2c…` (64 chars) |
+| `mediaID` | lowercase hex SHA-256 of the file's bytes as it came off the card | `9f2c…` (64 chars) |
 | `deploymentID` | `<locationID>_<YYYY-MM-DD>`, using the date the card came out of the camera | `juniper-draw_2026-11-17` |
 | `observationID` | `<mediaID>-<person code>-<n>`, n = 1, 2, … within that photo | `9f2c…-ana-1` |
 | share id | 26 random lowercase base32 chars (128 bits) | `k3…` |
@@ -129,7 +129,17 @@ They're written by the Uploader at upload time, in a worker with
 
 The Tagger shows `thumb.jpg` in grids and `view.jpg` in the large view. It never
 loads originals in a grid. Shares link to `view.jpg` and `thumb.jpg`, never to
-an original, because originals keep their EXIF, which can include GPS.
+an original.
+
+The stored original is the card's file with its camera data removed: every
+APPn segment except JFIF (APP0), the color profile (APP2 `ICC_PROFILE`) and
+Adobe's color transform (APP14), plus comments and any bytes after the image.
+That drops EXIF (time, GPS, camera serial, maker notes such as temperature),
+XMP and IPTC. The image data is unchanged. What the package needs from the
+camera, the time, is read first and kept in `media.csv`; the place is the
+deployment's. So the stored original's SHA-256 is not its `mediaID`.
+
+Every object is also encrypted at rest by the gate (see `GATE.md`).
 
 An original is stored under its file name, except:
 

@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 
 import { configFromEnv, withDefaults } from './server.mjs';
 import { makeGuard } from './namespace.mjs';
-import { makeUpstream } from './upstream.mjs';
+import { makeUpstream, loadDataKey, normalizeIfMatch } from './upstream.mjs';
 import { ownBucket, PERSON_CODE, RESERVED_CODES } from './rules.mjs';
 import {
   PEOPLE_PREFIX, personKey, newPassword, loadMasterKey, wrapSecret,
@@ -22,6 +22,11 @@ const SETTINGS_FILES = {
   'species.json': 'application/json',
 };
 
+// Headers an object keeps when encrypt-stored rewrites it.
+const KEEP_ON_REWRITE = new Set([
+  'content-type', 'content-disposition', 'content-language', 'cache-control', 'expires',
+]);
+
 const USAGE = `usage: node cli.mjs <command>
   init                       create the settings bucket if missing
   add <code> --name "Ana"    create sparcd-next-<code> and the person; prints the password once
@@ -29,18 +34,21 @@ const USAGE = `usage: node cli.mjs <command>
   pause <code>               stop access (the bucket is untouched)
   resume <code>              restore access
   list                       code, name, status
-  settings put <file>...     upload lab.json, sites.csv or species.json`;
+  settings put <file>...     upload lab.json, sites.csv or species.json
+  encrypt-stored             encrypt files stored before DATA_KEY was set (safe to repeat)`;
 
 export function openAdmin(env = process.env) {
   const config = withDefaults(configFromEnv(env));
   const inNamespace = makeGuard(config.allow);
   if (!inNamespace(config.settingsBucket)) throw new Error('SETTINGS_BUCKET is outside BUCKET_ALLOW');
-  const upstream = makeUpstream({
+  const credentials = {
     endpoint: config.upstream,
     region: config.region,
     accessKeyId: config.accessKeyId,
     secretAccessKey: config.secretAccessKey,
-  });
+  };
+  const dataKey = loadDataKey(config.dataKey);
+  const upstream = makeUpstream({ ...credentials, dataKey });
   const settings = config.settingsBucket;
   const guarded = (bucket) => {
     if (!inNamespace(bucket)) throw new Error(`${bucket} is outside BUCKET_ALLOW`);
@@ -107,6 +115,60 @@ export function openAdmin(env = process.env) {
       return people.filter((p) => p.status !== 404).map(({ value: { code, name, status } }) => ({ code, name, status }));
     },
 
+    /**
+     * Encrypts every object stored before DATA_KEY was set, in the settings
+     * bucket and each person's bucket, in place, keeping its headers. Stop the
+     * gate while it runs: If-Match leaves alone a file whose bytes changed, but
+     * not a rewrite of identical bytes with new headers. Safe to repeat.
+     */
+    async encryptStored(say) {
+      if (!dataKey) throw new Error('DATA_KEY is "none": there is no key to encrypt with');
+      const raw = makeUpstream({ ...credentials, dataKey: null });
+      const codes = (await this.list()).map((p) => p.code);
+      for (const bucket of [settings, ...codes.map(ownBucket)].map(guarded)) {
+        const keys = await upstream.listAll(bucket, '');
+        const count = { encrypted: 0, already: 0, changed: 0 };
+        let next = 0;
+        const lane = async () => {
+          while (next < keys.length) {
+            const { key } = keys[next++];
+            const head = await raw.send(raw.url(bucket, key), { method: 'HEAD' });
+            if (head.status === 404) continue;
+            // RGW refuses a keyless HEAD of an object stored with a customer
+            // key; this key must then read it.
+            if (head.status === 400) {
+              const keyed = await upstream.send(upstream.url(bucket, key), { method: 'HEAD' });
+              if (keyed.ok) { count.already += 1; continue; }
+              if (keyed.status === 404) continue;
+              throw new Error(`${bucket}/${key} is encrypted with another key (HEAD → ${keyed.status})`);
+            }
+            if (!head.ok) throw new Error(`HEAD ${bucket}/${key} → ${head.status}`);
+            const got = await raw.send(raw.url(bucket, key), { headers: { 'accept-encoding': 'identity' } });
+            if (got.status === 404) continue;
+            if (!got.ok) throw new Error(`GET ${bucket}/${key} → ${got.status}`);
+            // fetch would hand back decoded bytes; nothing in SPARC'd Next stores these.
+            if (got.headers.get('content-encoding')) throw new Error(`${bucket}/${key} has a content-encoding; encrypt it by hand`);
+            const etag = got.headers.get('etag');
+            if (!etag) throw new Error(`GET ${bucket}/${key} returned no ETag`);
+            const headers = { 'if-match': normalizeIfMatch(etag) };
+            for (const [name, value] of got.headers) {
+              if (KEEP_ON_REWRITE.has(name) || name.startsWith('x-amz-meta-')) headers[name] = value;
+            }
+            const put = await upstream.send(upstream.url(bucket, key), {
+              method: 'PUT',
+              body: Buffer.from(await got.arrayBuffer()),
+              headers,
+            });
+            if (put.status === 412) { count.changed += 1; continue; }
+            if (!put.ok) throw new Error(`PUT ${bucket}/${key} → ${put.status} ${await put.text()}`);
+            count.encrypted += 1;
+          }
+        };
+        await Promise.all(Array.from({ length: 8 }, lane));
+        say(`${bucket}: ${count.encrypted} encrypted, ${count.already} already encrypted, ${count.changed} changed meanwhile`);
+      }
+    },
+
     async putSettings(files) {
       for (const file of files) {
         const name = basename(file);
@@ -148,6 +210,9 @@ async function main(argv) {
       return;
     case 'list':
       for (const p of await admin.list()) process.stdout.write(`${p.code}\t${p.name}\t${p.status}\n`);
+      return;
+    case 'encrypt-stored':
+      await admin.encryptStored(say);
       return;
     case 'settings':
       if (rest[0] !== 'put' || rest.length < 2) break;

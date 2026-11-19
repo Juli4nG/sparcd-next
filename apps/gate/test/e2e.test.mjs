@@ -48,13 +48,14 @@ before(async () => {
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  const env = { ...ROOT, UPSTREAM: upstreamUrl, ACCESS_MASTER_KEY: Buffer.alloc(32, 9).toString('base64') };
+  // MinIO over plain HTTP refuses customer keys, so this suite runs without one.
+  const env = { ...ROOT, UPSTREAM: upstreamUrl, ACCESS_MASTER_KEY: Buffer.alloc(32, 9).toString('base64'), DATA_KEY: 'none' };
   admin = openAdmin(env);
   await admin.init();
   pw.ana = await admin.add('ana', 'Ana');
   pw.ben = await admin.add('ben', 'Ben');
   // A bucket outside the namespace, as real lab data would be.
-  const root = makeUpstream({ endpoint: upstreamUrl, accessKeyId: ROOT.S3_ACCESS_KEY_ID, secretAccessKey: ROOT.S3_SECRET_ACCESS_KEY });
+  const root = makeUpstream({ endpoint: upstreamUrl, accessKeyId: ROOT.S3_ACCESS_KEY_ID, secretAccessKey: ROOT.S3_SECRET_ACCESS_KEY, dataKey: null });
   await root.createBucket('lab-canary');
   await root.put('lab-canary', 'secret.txt', 'never read', { contentType: 'text/plain' });
   await root.put('sparcd-next-settings', 'lab.json', '{"title":"t"}');
@@ -63,7 +64,7 @@ before(async () => {
   origin = `http://127.0.0.1:${port}`;
   gate = await createGate({
     upstream: upstreamUrl, accessKeyId: ROOT.S3_ACCESS_KEY_ID, secretAccessKey: ROOT.S3_SECRET_ACCESS_KEY,
-    masterKey: env.ACCESS_MASTER_KEY, allowedHosts: `127.0.0.1:${port}`, log: () => {},
+    masterKey: env.ACCESS_MASTER_KEY, dataKey: 'none', allowedHosts: `127.0.0.1:${port}`, log: () => {},
   });
   await gate.listen(port);
 });
