@@ -70,6 +70,7 @@ export function App() {
     return (
       <Connection
         toolName="Tagger"
+        sameOrigin
         initialConfig={{ endpoint: location.origin }}
         onConnect={connect}
         onTestConnection={(config) => testSignIn(config)}
