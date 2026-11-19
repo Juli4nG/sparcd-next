@@ -186,8 +186,8 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
 
       {current ? (
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 min-[900px]:overflow-visible min-[900px]:grid-cols-[minmax(0,1fr)_clamp(440px,34vw,500px)]">
-          <section className="min-h-0 min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4" aria-label="Photo">
-            <div className="relative aspect-[4/3] min-[900px]:aspect-auto min-[900px]:flex-1 min-h-0 bg-ink overflow-hidden">
+          <section className="min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4 min-[900px]:min-h-0" aria-label="Photo">
+            <div className="relative aspect-[4/3] bg-ink overflow-hidden min-[900px]:aspect-auto min-[900px]:flex-1 min-[900px]:min-h-0">
               <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} onShown={() => setLoaded(current.mediaID)} />
               <NavButton side="left" hidden={focus === 0} onClick={() => go(focus - 1)} />
               <NavButton side="right" hidden={focus === photos.length - 1} onClick={() => go(focus + 1)} />
