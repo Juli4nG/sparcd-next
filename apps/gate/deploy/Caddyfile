@@ -30,6 +30,22 @@
 		file_server
 	}
 
+	redir /classic/upload /classic/upload/
+	handle_path /classic/upload/* {
+		root * /srv/sparcd-next/classic/upload
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+
+	redir /classic/tag /classic/tag/
+	handle_path /classic/tag/* {
+		root * /srv/sparcd-next/classic/tag
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+
 	handle {
 		root * /srv/sparcd-next/home
 		encode zstd gzip
