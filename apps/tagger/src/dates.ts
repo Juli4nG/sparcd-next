@@ -5,5 +5,7 @@ const day = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', 
 /** "Juniper Draw · 17 November 2026": the site, and the day the card came out of the camera. */
 export function cardTitle(d: Deployment): string {
   const date = d.deploymentID.slice(-10);
-  return `${d.locationName || d.locationID} · ${day.format(new Date(`${date}T00:00:00Z`))}`;
+  // A shared card has no place name, so its site id is made readable.
+  const site = d.locationName || (d.locationID ?? '').replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  return `${site} · ${day.format(new Date(`${date}T00:00:00Z`))}`;
 }
