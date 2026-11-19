@@ -107,7 +107,11 @@ export async function saveTags(
   editedAt: (id: string) => string,
 ): Promise<void> {
   const media = new Map(card.photos.map((m) => [m.mediaID, m]));
-  const rows = ids.flatMap((id) => tagRows(media.get(id)!, toBucketTags(tagsOf(id)), session.code, { timestamp: editedAt(id) }));
+  const rows = ids.flatMap((id) => {
+    const tags = tagsOf(id);
+    // A tag applied to a whole burst carries the burst's eventID onto its own row (FORMAT.md).
+    return tagRows(media.get(id)!, toBucketTags(tags), session.code, { timestamp: editedAt(id) }).map((row, i) => ({ ...row, eventID: tags[i].eventID ?? '' }));
+  });
   await savePackage(
     session.bucket,
     {
