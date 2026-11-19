@@ -4,7 +4,7 @@
 
 import { randomBytes, randomInt, webcrypto } from 'node:crypto';
 
-import { ACCESS_PREFIX } from './rules.mjs';
+import { ACCESS_PREFIX, RESERVED_CODES } from './rules.mjs';
 import { WORDS } from './words.mjs';
 
 export const PEOPLE_PREFIX = `${ACCESS_PREFIX}people/`;
@@ -58,7 +58,7 @@ export function makePeople({ upstream, settingsBucket, masterKey, pollMs = 5000,
     const seen = new Set();
     await Promise.all(listed.map(async ({ key, etag }) => {
       const code = /^access\/people\/([a-z][a-z0-9]{1,19})\.json$/.exec(key)?.[1];
-      if (!code) return;
+      if (!code || RESERVED_CODES.has(code)) return;
       seen.add(code);
       if (byCode.get(code)?.etag === etag) return;
       const got = await upstream.getJson(settingsBucket, key);

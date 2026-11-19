@@ -15,12 +15,8 @@ const LONG_PRESIGN_KEY = /^(Media\/[0-9a-f]{64}\/(thumb|view)\.jpg$|shared\/)/;
 const KNOWN_QUERY = new Set([
   'list-type', 'prefix', 'delimiter', 'max-keys', 'continuation-token',
   'start-after', 'encoding-type', 'fetch-owner', 'marker',
-  'uploads', 'uploadId', 'partNumber', 'max-parts', 'part-number-marker',
   'location',
   'x-id',
-  'response-content-type', 'response-content-disposition',
-  'response-cache-control', 'response-content-encoding',
-  'response-content-language', 'response-expires',
   'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Date', 'X-Amz-Expires',
   'X-Amz-SignedHeaders', 'X-Amz-Signature', 'X-Amz-Security-Token',
   // The AWS SDK presigner hoists its UNSIGNED-PAYLOAD declaration into the query.
@@ -32,37 +28,28 @@ export function classify({ method, bucket, key, query, headers }) {
   for (const name of query.keys()) {
     if (!KNOWN_QUERY.has(name)) return null;
   }
-  const has = (name) => query.has(name);
-
   if (!bucket) return method === 'GET' ? 'ListBuckets' : null;
 
   if (!key) {
-    if (method === 'HEAD') return 'HeadBucket';
-    if (method === 'GET' && has('location')) return 'GetBucketLocation';
-    if (method === 'GET' && has('uploads')) return 'ListMultipartUploads';
-    if (method === 'GET') return 'ListObjectsV2';
+    if (method === 'HEAD' && query.size === 0) return 'HeadBucket';
+    if (method === 'GET' && query.has('location')) return 'GetBucketLocation';
+    if (method === 'GET' && query.get('list-type') === '2') return 'ListObjectsV2';
     return null;
   }
 
   // CopyObject wears PutObject's clothes; the source header is the only tell.
   if (headers.get('x-amz-copy-source')) return 'CopyObject';
 
-  if (method === 'GET') return has('uploadId') ? 'ListParts' : 'GetObject';
+  if (method === 'GET') return 'GetObject';
   if (method === 'HEAD') return 'HeadObject';
-  if (method === 'PUT') return has('uploadId') && has('partNumber') ? 'UploadPart' : 'PutObject';
-  if (method === 'POST') {
-    if (has('uploads')) return 'CreateMultipartUpload';
-    if (has('uploadId')) return 'CompleteMultipartUpload';
-    return null;
-  }
-  if (method === 'DELETE') return has('uploadId') ? 'AbortMultipartUpload' : 'DeleteObject';
+  if (method === 'PUT') return 'PutObject';
+  if (method === 'DELETE') return 'DeleteObject';
   return null;
 }
 
 const OWN_OPS = new Set([
   'GetObject', 'HeadObject', 'ListObjectsV2', 'HeadBucket', 'GetBucketLocation',
-  'PutObject', 'CreateMultipartUpload', 'UploadPart', 'CompleteMultipartUpload',
-  'AbortMultipartUpload', 'ListParts',
+  'PutObject',
 ]);
 const SETTINGS_OPS = new Set(['GetObject', 'HeadObject', 'ListObjectsV2']);
 
@@ -101,10 +88,9 @@ function deny(reason) {
 /** The longest presign this key may carry. */
 export const presignLimit = (key) => (LONG_PRESIGN_KEY.test(key) ? LONG_PRESIGN_S : DEFAULT_PRESIGN_S);
 
-/** Content-addressed media never changes; everything else is per-person and live. */
-export function cacheControl(op, key, status) {
-  return op === 'GetObject' && (status === 200 || status === 206) && key.startsWith('Media/')
-    ? 'private, max-age=604800, immutable'
+export function cacheControl(op, key, status, presigned) {
+  return presigned && op === 'GetObject' && (status === 200 || status === 206) && key.startsWith('Media/')
+    ? 'private, max-age=7200, immutable'
     : 'no-store';
 }
 

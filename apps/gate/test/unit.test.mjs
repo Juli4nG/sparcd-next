@@ -1,7 +1,6 @@
-// No sockets: signatures, the namespace guard, classification and the rules.
-
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer, request } from 'node:http';
 import { AwsClient } from 'aws4fetch';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -9,7 +8,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { verifySignature, canonicalQueryString, encodeRfc3986, sha256hex } from '../sigv4.mjs';
 import {
   makeGuard, bucketFromPath, keyFromPath, safeKeySegments, safeRequestTarget,
-  scrubErrorDetail, namesOtherBucket,
+  namesOtherBucket,
 } from '../namespace.mjs';
 import {
   classify, decide, presignLimit, cacheControl, settingsPrefixAllowed,
@@ -18,10 +17,132 @@ import { afterTree, decodeListingToken, encodeListingToken, listAroundAccess } f
 import { loadMasterKey, wrapSecret, unwrapSecret, newPassword } from '../people.mjs';
 import { WORDS } from '../words.mjs';
 import { normalizeIfMatch } from '../upstream.mjs';
+import { createGate } from '../server.mjs';
+import { openAdmin } from '../cli.mjs';
 
 const KEY = { accessKeyId: 'ana', secretAccessKey: 'maple-river-stone-cloud' };
 const lookup = (id) => (id === KEY.accessKeyId ? KEY.secretAccessKey : null);
 const aws = new AwsClient({ ...KEY, service: 's3', region: 'us-east-1' });
+
+test('server and CLI reject settings buckets that a person could own or outside the prefix', async () => {
+  for (const settingsBucket of ['lab-settings', 'sparcd-next-ana']) {
+    await assert.rejects(createGate({ settingsBucket, allow: '*' }), /SETTINGS_BUCKET/);
+    assert.throws(() => openAdmin({ SETTINGS_BUCKET: settingsBucket, BUCKET_ALLOW: '*' }), /SETTINGS_BUCKET/);
+  }
+});
+
+test('gate HTTP requests and responses', async (t) => {
+  const masterKey = Buffer.alloc(32, 9).toString('base64');
+  const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
+  const upstream = createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.searchParams.get('prefix') === 'access/people/') {
+      return res.end('<Contents><Key>access/people/ana.json</Key><ETag>person</ETag></Contents>');
+    }
+    if (url.pathname.endsWith('/ana.json')) return res.end(JSON.stringify({ status: 'active', wrappedSecret }));
+    if (url.pathname.endsWith('/slow')) return;
+    if (url.pathname.endsWith('/slow-error')) {
+      res.writeHead(404, { 'content-type': 'application/xml' });
+      return res.write('<Error>');
+    }
+    if (url.pathname.endsWith('/missing') || url.pathname.endsWith('/invalid-code')) {
+      res.writeHead(404, { 'content-type': 'application/xml' });
+      const code = url.pathname.endsWith('/missing') ? 'NoSuchKey' : 'Invalid-123';
+      return res.end(`<Error><Code>${code}</Code><Message>private upstream detail</Message></Error>`);
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    return res.end('<script>alert(1)</script>');
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => {
+    upstream.closeAllConnections();
+    upstream.close(resolve);
+  }));
+  const gate = await createGate({
+    ...KEY, masterKey, upstream: `http://127.0.0.1:${upstream.address().port}`,
+    allowedHosts: 'gate.test', log: () => {},
+  });
+  t.after(() => gate.close());
+  const port = await gate.listen(0);
+  const bucket = '/sparcd-next-ana';
+  const media = `${bucket}/Media/test.html`;
+  const call = async (path, { method = 'GET', presigned = false, body, headers = {}, sign = true } = {}) => {
+    const target = new URL(path, 'http://gate.test');
+    if (presigned) target.searchParams.set('X-Amz-Expires', '7200');
+    if (sign) {
+      const req = presigned ? await aws.sign(target, { method, aws: { signQuery: true } })
+        : await signed(target, { method });
+      target.search = new URL(req.url).search;
+      headers = { ...Object.fromEntries(req.headers), ...headers };
+    }
+    return new Promise((resolve, reject) => {
+      const req = request({
+        hostname: '127.0.0.1', port, method, path: target.pathname + target.search,
+        headers: { host: 'gate.test', ...headers },
+      }, (res) => {
+        res.setEncoding('utf8');
+        let text = '';
+        res.on('data', (chunk) => { text += chunk; });
+        res.on('error', reject);
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
+      });
+      req.on('error', reject);
+      req.end(body);
+    });
+  };
+
+  await t.test('removed operations and a plain bucket GET return 403', async () => {
+    for (const [method, path] of [
+      ['DELETE', `${media}?uploadId=`], ['PUT', `${media}?partNumber=1&uploadId=x`], ['GET', bucket],
+    ]) {
+      const res = await call(path, { method });
+      assert.equal(res.status, 403);
+      assert.match(res.text, /unknown operation/);
+    }
+  });
+
+  await t.test('duplicate names and GET or HEAD bodies are refused before signature verification', async () => {
+    const duplicate = await call(`${bucket}?prefix=a&%70refix=b`, { sign: false });
+    assert.equal(duplicate.status, 403);
+    assert.match(duplicate.text, /duplicate query parameter/);
+    assert.equal((await call(media, { headers: { 'content-length': '1' }, body: 'x', sign: false })).status, 400);
+    assert.equal((await call(media, { method: 'HEAD', headers: { 'transfer-encoding': 'chunked' }, sign: false })).status, 400);
+  });
+
+  await t.test('object responses are sandboxed and only presigned Media GETs are cached', async () => {
+    for (const [method, presigned] of [['GET', false], ['GET', true], ['HEAD', false]]) {
+      const res = await call(media, { method, presigned });
+      assert.equal(res.status, 200);
+      assert.equal(res.headers['content-security-policy'], "sandbox; default-src 'none'");
+      assert.equal(res.headers['x-content-type-options'], 'nosniff');
+      assert.equal(res.headers['cache-control'], presigned ? 'private, max-age=7200, immutable' : 'no-store');
+    }
+  });
+
+  await t.test('upstream errors only keep a valid S3 code', async () => {
+    for (const [key, code] of [['missing', 'NoSuchKey'], ['invalid-code', 'InternalError']]) {
+      const res = await call(`${bucket}/${key}`);
+      assert.equal(res.status, 404);
+      assert.equal(res.headers['content-type'], 'application/xml');
+      assert.equal(res.headers['x-content-type-options'], 'nosniff');
+      assert.equal(res.headers['cache-control'], 'no-store');
+      assert.match(res.text, new RegExp(`<Error><Code>${code}</Code><Message>Not Found</Message></Error>$`));
+    }
+  });
+
+  await t.test('upstream requests time out with S3 XML', async (subtest) => {
+    const timeout = AbortSignal.timeout;
+    subtest.mock.method(AbortSignal, 'timeout', (ms) => {
+      assert.equal(ms, 60_000);
+      return timeout(100);
+    });
+    for (const key of ['slow', 'slow-error']) {
+      const res = await call(`${bucket}/${key}`);
+      assert.equal(res.status, 504);
+      assert.match(res.text, /<Error><Code>GatewayTimeout<\/Code><Message>/);
+    }
+  });
+});
 
 async function signed(url, init = {}) {
   const body = init.body;
@@ -168,6 +289,7 @@ describe('namespace guard', () => {
     assert.equal(inNamespace('sparcd-next-settings'), true);
     for (const name of ['sparcd-other', 'lab-encrypted-data', 'sparcd-next', 'xsparcd-next-ana', 'SPARCD-NEXT-ANA']) {
       assert.equal(inNamespace(name), false, name);
+      assert.equal(makeGuard('*')(name), false, name);
     }
   });
 
@@ -193,9 +315,7 @@ describe('namespace guard', () => {
     assert.equal(safeRequestTarget('/sparcd-next-ana/x'), true);
   });
 
-  test('responses are scrubbed and checked for other buckets', () => {
-    const xml = '<Error><Code>NoSuchKey</Code><Resource>/sparcd-next-ana/k</Resource><HostId>h</HostId></Error>';
-    assert.equal(scrubErrorDetail(xml), '<Error><Code>NoSuchKey</Code></Error>');
+  test('responses are checked for other buckets', () => {
     assert.equal(namesOtherBucket('<ListBucketResult><Name>sparcd-next-ana</Name></ListBucketResult>', 'sparcd-next-ana'), false);
     assert.equal(namesOtherBucket('<Error><BucketName>lab-private</BucketName></Error>', 'sparcd-next-ana'), true);
   });
@@ -209,28 +329,26 @@ describe('classify', () => {
     assert.equal(call('GET', null, ''), 'ListBuckets');
     assert.equal(call('GET', 'b', '', 'list-type=2&prefix=x'), 'ListObjectsV2');
     assert.equal(call('GET', 'b', '', 'location='), 'GetBucketLocation');
-    assert.equal(call('GET', 'b', '', 'uploads='), 'ListMultipartUploads');
     assert.equal(call('HEAD', 'b', ''), 'HeadBucket');
     assert.equal(call('GET', 'b', 'k'), 'GetObject');
     assert.equal(call('HEAD', 'b', 'k'), 'HeadObject');
     assert.equal(call('PUT', 'b', 'k'), 'PutObject');
-    assert.equal(call('POST', 'b', 'k', 'uploads='), 'CreateMultipartUpload');
-    assert.equal(call('PUT', 'b', 'k', 'uploadId=x&partNumber=1'), 'UploadPart');
-    assert.equal(call('POST', 'b', 'k', 'uploadId=x'), 'CompleteMultipartUpload');
-    assert.equal(call('DELETE', 'b', 'k', 'uploadId=x'), 'AbortMultipartUpload');
-    assert.equal(call('GET', 'b', 'k', 'uploadId=x'), 'ListParts');
     assert.equal(call('DELETE', 'b', 'k'), 'DeleteObject');
     assert.equal(call('PUT', 'b', 'k', '', new Headers({ 'x-amz-copy-source': '/o/k' })), 'CopyObject');
   });
 
   test('unknown parameters and bucket-level writes are unclassifiable', () => {
-    for (const query of ['acl=', 'policy=', 'versioning=', 'tagging=', 'cors=', 'versions=']) {
+    for (const query of ['acl=', 'policy=', 'versioning=', 'tagging=', 'cors=', 'versions=',
+      'uploads=', 'uploadId=', 'partNumber=1', 'max-parts=1', 'part-number-marker=1',
+      'response-content-type=text/html']) {
       assert.equal(call('GET', 'b', '', query), null, query);
       assert.equal(call('PUT', 'b', 'k', query), null, query);
     }
     assert.equal(call('PUT', 'b', ''), null, 'CreateBucket');
     assert.equal(call('DELETE', 'b', ''), null, 'DeleteBucket');
     assert.equal(call('POST', 'b', '', 'delete='), null, 'DeleteObjects');
+    assert.equal(call('HEAD', 'b', '', 'x-id=HeadBucket'), null);
+    assert.equal(call('GET', 'b', '', 'list-type=1'), null);
   });
 });
 
@@ -239,12 +357,11 @@ describe('the rules', () => {
   const allow = (op, bucket, key = '', extra = {}) =>
     decide(ana, { op, bucket, key, settingsBucket: 'sparcd-next-settings', ifNoneMatch: null, ...extra }).allow;
 
-  test('own bucket: read, list, write and multipart, never delete', () => {
-    for (const op of ['GetObject', 'HeadObject', 'ListObjectsV2', 'HeadBucket', 'GetBucketLocation', 'PutObject',
-      'CreateMultipartUpload', 'UploadPart', 'CompleteMultipartUpload', 'AbortMultipartUpload', 'ListParts']) {
+  test('own bucket: read, list, write, never delete', () => {
+    for (const op of ['GetObject', 'HeadObject', 'ListObjectsV2', 'HeadBucket', 'GetBucketLocation', 'PutObject']) {
       assert.equal(allow(op, 'sparcd-next-ana', 'media.csv'), true, op);
     }
-    for (const op of ['DeleteObject', 'CopyObject', 'ListMultipartUploads', 'ListBuckets', null]) {
+    for (const op of ['DeleteObject', 'CopyObject', 'ListBuckets', null]) {
       assert.equal(allow(op, 'sparcd-next-ana', 'media.csv'), false, op);
     }
   });
@@ -290,12 +407,11 @@ describe('the rules', () => {
     assert.equal(presignLimit('observations.csv'), 7200);
   });
 
-  test('Media/ objects are cached immutable, everything else no-store', () => {
-    assert.equal(cacheControl('GetObject', 'Media/x/view.jpg', 200), 'private, max-age=604800, immutable');
-    assert.equal(cacheControl('GetObject', 'Media/x/view.jpg', 206), 'private, max-age=604800, immutable');
-    assert.equal(cacheControl('GetObject', 'Media/x/view.jpg', 404), 'no-store');
-    assert.equal(cacheControl('HeadObject', 'Media/x/view.jpg', 200), 'no-store');
-    assert.equal(cacheControl('GetObject', 'media.csv', 200), 'no-store');
+  test('only successful presigned Media/ GETs are cached', () => {
+    assert.equal(cacheControl('GetObject', 'Media/x/view.jpg', 206, true), 'private, max-age=7200, immutable');
+    assert.equal(cacheControl('GetObject', 'Media/x/view.jpg', 404, true), 'no-store');
+    assert.equal(cacheControl('HeadObject', 'Media/x/view.jpg', 200, true), 'no-store');
+    assert.equal(cacheControl('GetObject', 'media.csv', 200, true), 'no-store');
   });
 });
 

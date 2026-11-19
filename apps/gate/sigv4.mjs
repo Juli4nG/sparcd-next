@@ -1,5 +1,6 @@
 // SigV4 verification of the caller's request, against the person's password.
-// WebCrypto only (crypto.subtle, TextEncoder).
+
+import { timingSafeEqual } from 'node:crypto';
 
 const encoder = new TextEncoder();
 
@@ -44,12 +45,10 @@ export const DROP_FROM_CLIENT = new Set([
   'host',
 ]);
 
-// Comparing hex strings with === leaks the signature a character at a time.
 function constantTimeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export function parseAuthorization(header) {
@@ -84,8 +83,6 @@ export function canonicalQueryString(url, omit) {
   return [...url.searchParams]
     .filter(([key]) => key !== omit)
     .map(([key, value]) => [encodeRfc3986(key), encodeRfc3986(value)])
-    // Sort by encoded key, then by encoded value: `?partNumber=2&partNumber=1`
-    // is legitimate, and both the AWS SDK and aws4fetch sort values too.
     .sort(([ka, va], [kb, vb]) =>
       ka < kb ? -1 : ka > kb ? 1 : va < vb ? -1 : va > vb ? 1 : 0)
     .map(([key, value]) => `${key}=${value}`)

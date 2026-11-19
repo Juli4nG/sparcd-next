@@ -34,6 +34,7 @@ const USAGE = `usage: node cli.mjs <command>
 export function openAdmin(env = process.env) {
   const config = withDefaults(configFromEnv(env));
   const inNamespace = makeGuard(config.allow);
+  if (!inNamespace(config.settingsBucket)) throw new Error('SETTINGS_BUCKET is outside BUCKET_ALLOW');
   const upstream = makeUpstream({
     endpoint: config.upstream,
     region: config.region,

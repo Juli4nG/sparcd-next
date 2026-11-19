@@ -143,7 +143,7 @@ test('settings: readable, read-only, access/ hidden', async () => {
   assert.equal(folders.text.includes('access'), false);
 });
 
-test('Media/ is write-once and cached immutable', async () => {
+test('Media/ is write-once and header-signed reads use no-store', async () => {
   const photo = Buffer.from('a photo');
   const key = `/sparcd-next-ana/Media/${sha(photo)}/thumb.jpg`;
   const headers = { 'content-type': 'image/jpeg' };
@@ -151,33 +151,8 @@ test('Media/ is write-once and cached immutable', async () => {
   assert.equal((await call('PUT', key, { body: photo, headers: { ...headers, 'if-none-match': '*' } })).status, 200);
   assert.equal((await call('PUT', key, { body: photo, headers: { ...headers, 'if-none-match': '*' } })).status, 412);
   const got = await call('GET', key);
-  assert.equal(got.headers.get('cache-control'), 'private, max-age=604800, immutable');
+  assert.equal(got.headers.get('cache-control'), 'no-store');
   assert.equal((await call('GET', key, { headers: { range: 'bytes=0-1' } })).status, 206);
-});
-
-test('multipart: bare ?uploads, If-None-Match on complete, abort, no bucket-wide listing', async () => {
-  const key = `/sparcd-next-ana/Media/${sha('big')}/IMG_0001.JPG`;
-  const create = await call('POST', `${key}?uploads`);
-  assert.equal(create.status, 200);
-  const uploadId = /<UploadId>(.*?)<\/UploadId>/.exec(create.text)[1];
-  const q = `uploadId=${encodeURIComponent(uploadId)}`;
-  const part = await call('PUT', `${key}?partNumber=1&${q}`, { body: 'part one' });
-  assert.equal(part.status, 200);
-  assert.equal((await call('GET', `${key}?${q}`)).status, 200);
-  assert.equal((await call('GET', '/sparcd-next-ana?uploads')).status, 403);
-  const complete = `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>${part.headers.get('etag')}</ETag></Part></CompleteMultipartUpload>`;
-  const done = await call('POST', `${key}?${q}`, { body: complete, headers: { 'if-none-match': '*' } });
-  assert.equal(done.status, 200, done.text);
-  assert.equal(done.text.includes('127.0.0.1'), false);
-  assert.equal((await call('GET', key)).text, 'part one');
-
-  const second = /<UploadId>(.*?)<\/UploadId>/.exec((await call('POST', `${key}?uploads`)).text)[1];
-  const q2 = `uploadId=${encodeURIComponent(second)}`;
-  const p2 = await call('PUT', `${key}?partNumber=1&${q2}`, { body: 'other bytes' });
-  const again = `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>${p2.headers.get('etag')}</ETag></Part></CompleteMultipartUpload>`;
-  assert.equal((await call('POST', `${key}?${q2}`, { body: again, headers: { 'if-none-match': '*' } })).status, 412);
-  assert.equal((await call('DELETE', `${key}?${q2}`)).status, 204);
-  assert.equal((await call('GET', key)).text, 'part one');
 });
 
 test('presign limits depend on the key', async () => {

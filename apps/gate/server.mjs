@@ -5,16 +5,17 @@
 // which never leaves this process. Caddy fronts it on the same origin as the
 // apps and passes Host through unchanged, because Host is what the caller signed.
 
-import { createServer } from 'node:http';
+import { createServer, STATUS_CODES } from 'node:http';
 import { Readable, pipeline } from 'node:stream';
 
 import { verifySignature, peekAccessKeyId, escapeXml, DROP_FROM_CLIENT } from './sigv4.mjs';
 import {
-  makeGuard, bucketFromPath, keyFromPath, scrubErrorDetail, namesOtherBucket,
+  makeGuard, bucketFromPath, keyFromPath, namesOtherBucket,
   safeKeySegments, safeRequestTarget,
 } from './namespace.mjs';
 import {
   classify, decide, ownBucket, presignLimit, cacheControl, settingsPrefixAllowed,
+  BUCKET_PREFIX, PERSON_CODE, RESERVED_CODES,
 } from './rules.mjs';
 import { buildListing, decodeListingToken, listAroundAccess } from './listing.mjs';
 import { makePeople, loadMasterKey } from './people.mjs';
@@ -61,7 +62,7 @@ export function configFromEnv(env = process.env) {
 }
 
 export function withDefaults(input) {
-  return {
+  const config = {
     region: 'us-east-1',
     settingsBucket: 'sparcd-next-settings',
     allow: 'sparcd-next-*',
@@ -73,6 +74,12 @@ export function withDefaults(input) {
     staleMs: 30000,
     ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v !== '')),
   };
+  const suffix = config.settingsBucket.slice(BUCKET_PREFIX.length);
+  if (!config.settingsBucket.startsWith(BUCKET_PREFIX)
+      || (PERSON_CODE.test(suffix) && !RESERVED_CODES.has(suffix))) {
+    throw new Error('SETTINGS_BUCKET must start with sparcd-next- and cannot be a person bucket');
+  }
+  return config;
 }
 
 export async function createGate(input) {
@@ -113,11 +120,15 @@ export async function createGate(input) {
   let settingsListings = 0;
 
   const server = createServer((req, res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     handle(req, res).catch((err) => {
       // The detail goes to the operator, never to the caller.
       log('request failed', err);
-      if (!res.headersSent) respondXml(res, 500, 'InternalError', 'the request could not be completed');
-      else res.destroy();
+      if (res.headersSent) return res.destroy();
+      if (err.name === 'TimeoutError') {
+        return respondXml(res, 504, 'GatewayTimeout', 'upstream request timed out');
+      }
+      return respondXml(res, 500, 'InternalError', 'the request could not be completed');
     });
   });
   server.on('clientError', (err, socket) => socket.destroy());
@@ -134,6 +145,18 @@ export async function createGate(input) {
     if (url.host !== host) return respondXml(res, 400, 'InvalidURI', 'request target must be origin-form');
 
     const isApi = url.pathname.startsWith('/-/');
+    const refuse = (status, code, message) => {
+      req.resume();
+      return isApi ? respondJson(res, status, { error: message }) : respondXml(res, status, code, message);
+    };
+    if (new Set(url.searchParams.keys()).size !== url.searchParams.size) {
+      return refuse(403, 'AccessDenied', 'duplicate query parameter');
+    }
+    const bodyless = req.method === 'GET' || req.method === 'HEAD';
+    if (bodyless && (Number(req.headers['content-length'] ?? 0) !== 0
+        || req.headers['transfer-encoding'] !== undefined)) {
+      return refuse(400, 'InvalidRequest', 'GET and HEAD cannot carry a request body');
+    }
     if (isApi && url.pathname === '/-/health' && req.method === 'GET') {
       return respondJson(res, 200, { ok: true });
     }
@@ -141,10 +164,6 @@ export async function createGate(input) {
       req.resume();
       return respondJson(res, 404, { error: 'not found' });
     }
-    const refuse = (status, code, message) => {
-      req.resume();
-      return isApi ? respondJson(res, status, { error: message }) : respondXml(res, status, code, message);
-    };
 
     if (!people.fresh()) return refuse(503, 'ServiceUnavailable', 'access data could not be refreshed');
 
@@ -162,7 +181,7 @@ export async function createGate(input) {
     if (claimedPerson.status !== 'active') return refuse(403, 'AccessDenied', `login is ${claimedPerson.status}`);
 
     let body;
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    if (!bodyless) {
       if (Number(req.headers['content-length'] ?? 0) > config.maxBodyBytes) {
         return refuse(413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
       }
@@ -205,7 +224,6 @@ export async function createGate(input) {
     };
 
     if (!bucket) return denied(url.pathname === '/' ? 'ListBuckets is not served' : 'invalid bucket name');
-    // The hard wall: nothing outside BUCKET_ALLOW is touched, whatever the rules say.
     if (!inNamespace(bucket)) return denied('bucket is outside the namespace');
     if (key === null || !safeKeySegments(key)) return denied('unusable object key');
     for (const [name] of headers) {
@@ -252,14 +270,19 @@ export async function createGate(input) {
     }
     const upstreamRes = await upstream.send(target, { method: req.method, headers: out, body });
 
+    if (!upstreamRes.ok && upstreamRes.status !== 304) return respondUpstreamError(res, upstreamRes);
+
     const responseHeaders = pickHeaders(upstreamRes);
-    responseHeaders['cache-control'] = cacheControl(op, key, upstreamRes.status);
+    responseHeaders['cache-control'] = cacheControl(op, key, upstreamRes.status, verified.presigned);
+    if (op === 'GetObject' || op === 'HeadObject') {
+      responseHeaders['content-security-policy'] = "sandbox; default-src 'none'";
+    }
 
     // Object bytes stream straight through. Everything else that has a body
     // is small XML, and the only thing that can name another bucket.
     const objectBody = op === 'GetObject' && upstreamRes.ok;
-    if (req.method !== 'HEAD' && !objectBody) {
-      const xml = scrubErrorDetail(await upstreamRes.text());
+    if (req.method !== 'HEAD' && upstreamRes.status !== 304 && !objectBody) {
+      const xml = await upstreamRes.text();
       if (namesOtherBucket(xml, bucket)) {
         log(`upstream response for ${bucket} named another bucket`);
         return respondXml(res, 502, 'InternalError', 'the upstream answer was unusable');
@@ -299,6 +322,8 @@ export async function createGate(input) {
       });
       return res.end(xml);
     } catch (err) {
+      if (err.name === 'TimeoutError') throw err;
+      if (err.cause instanceof Response) return respondUpstreamError(res, err.cause);
       log('settings listing failed', err);
       return respondXml(res, 502, 'InternalError', 'the upstream answer was unusable');
     } finally {
@@ -354,6 +379,12 @@ function respondXml(res, status, code, message) {
     'cache-control': 'no-store',
   });
   res.end(xml);
+}
+
+async function respondUpstreamError(res, upstreamRes) {
+  const xml = await upstreamRes.text();
+  const code = /<Code>([A-Za-z]{1,64})<\/Code>/.exec(xml)?.[1] ?? 'InternalError';
+  return respondXml(res, upstreamRes.status, code, STATUS_CODES[upstreamRes.status] ?? 'Upstream error');
 }
 
 function respondJson(res, status, value) {

@@ -3,6 +3,8 @@
 // that is not a plain, valid, lowercase bucket name is rejected rather than
 // normalised: `%2F`, `../`, uppercase and empty all fail the same check.
 
+import { BUCKET_PREFIX } from './rules.mjs';
+
 const BUCKET_NAME = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 
 export function validBucketName(name) {
@@ -26,7 +28,8 @@ function globToRegExp(glob) {
 export function makeGuard(spec) {
   const globs = String(spec).split(',').map((g) => g.trim()).filter(Boolean).map(globToRegExp);
   if (globs.length === 0) throw new Error('BUCKET_ALLOW is empty');
-  return (bucket) => validBucketName(bucket) && globs.some((re) => re.test(bucket));
+  return (bucket) => validBucketName(bucket) && bucket.startsWith(BUCKET_PREFIX)
+    && globs.some((re) => re.test(bucket));
 }
 
 /**
@@ -54,17 +57,6 @@ export function keyFromPath(pathname) {
   } catch {
     return null;
   }
-}
-
-/**
- * Elements that describe where the upstream is rather than what the caller
- * asked for: `Location` on a completed multipart upload is a full upstream
- * URL, `Endpoint` appears on redirects, `Resource` and `HostId` on errors.
- */
-export function scrubErrorDetail(xml) {
-  return xml.replace(
-    /<(Resource|HostId|Location|Endpoint)(?:\s[^>]*)?>[\s\S]*?<\/\1>/g, '',
-  );
 }
 
 /** True when an XML response names a bucket other than the caller's. */

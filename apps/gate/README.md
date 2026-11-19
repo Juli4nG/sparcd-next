@@ -14,7 +14,7 @@ layout is [`docs/next/FORMAT.md`](../../docs/next/FORMAT.md).
 | --- | --- |
 | `server.mjs` | the HTTP server: verify, decide, re-sign, stream back |
 | `sigv4.mjs` | signature verification, header and presigned |
-| `namespace.mjs` | the `BUCKET_ALLOW` guard, path parsing, response scrubbing |
+| `namespace.mjs` | bucket guard, path parsing, response bucket checks |
 | `rules.mjs` | request → S3 operation, and the access table |
 | `listing.mjs` | settings-bucket listings with `access/` stepped over |
 | `people.mjs` | people records, wrapped passwords, the password generator |
@@ -121,9 +121,8 @@ Leave `changeOrigin` off: rewriting Host breaks every signature.
   and streaming payloads are refused, so turn off the AWS SDK's flexible
   checksums (`requestChecksumCalculation: 'WHEN_REQUIRED'`) and hash Blob
   bodies yourself.
-- `If-None-Match: *`, signed, on every PutObject under `Media/`. It's also
-  forwarded on CompleteMultipartUpload, where MinIO answers 412 if the photo
-  already exists; the gate only requires it on PutObject.
+- One PUT per object, with a signed `If-None-Match: *` under `Media/`.
+- `list-type=2` for bucket listings and an empty query for HeadBucket.
 - Presigned URLs: GET or HEAD, at most 7,200 s, or 604,800 s for
   `Media/<sha256>/thumb.jpg`, `Media/<sha256>/view.jpg` and `shared/…`.
 

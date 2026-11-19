@@ -36,7 +36,10 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
   // refuses a PUT whose `content-type` is present but unsigned. Nothing here
   // sets `content-length`, `connection` or `host`, which the runtime rewrites
   // after signing.
-  const signAll = (init) => ({ ...init, redirect: 'manual', aws: { ...init.aws, allHeaders: true } });
+  const signAll = (init) => ({
+    ...init, signal: AbortSignal.timeout(60_000), redirect: 'manual',
+    aws: { ...init.aws, allHeaders: true },
+  });
   const send = (u, init = {}) => passthrough.fetch(u, signAll(init));
   const sendMeta = (u, init = {}) => aws.fetch(u, signAll(init));
 
@@ -86,7 +89,7 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
       if (token) query['continuation-token'] = token;
       if (startAfter) query['start-after'] = startAfter;
       const res = await sendMeta(url(bucket, '', query));
-      if (!res.ok) throw new Error(`LIST ${bucket}/${prefix} → ${res.status}`);
+      if (!res.ok) throw new Error(`LIST ${bucket}/${prefix} → ${res.status}`, { cause: res });
       const xml = await res.text();
       const keys = [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)].map((m) => {
         const pick = (tag) => {
