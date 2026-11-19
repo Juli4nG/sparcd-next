@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readPackage, type Media, type Session, type Species } from '@sparcd/bucket';
-import { burstsOf, untaggedBurst, type Burst } from '../data/bursts';
 import type { Card } from '../data/card';
 import type { SaveStatus } from '../data/saver';
 import { addTag, NOTHING, removeTag, setCount as setTagCount, speciesTag, tagState, type PhotoTag } from '../data/tags';
@@ -14,8 +13,6 @@ import './simple.css';
 
 const FAVORITES = 6;
 const STRIP = 9;
-/** Longer runs are a camera on a timer, not one visit: their photos are tagged one by one. */
-const MAX_BURST = 12;
 const UNDO_LIMIT = 50;
 const NONE: PhotoTag[] = [];
 const NOTHING_HERE = 'Nothing in this photo';
@@ -54,12 +51,10 @@ export function SimpleTag(props: Props) {
 function Screen({ species, card, title, tagging, favorites }: Props & { favorites: Species[] }) {
   const { tags } = tagging;
   const photos = card.photos;
-  const bursts = useMemo(() => burstsOf(photos), [photos]);
   const byKey = useMemo(() => new Map(species.map((s) => [speciesTag(s).key, s])), [species]);
 
   const [focus, setFocus] = useState(() => Math.max(0, photos.findIndex((p) => tagState(tags.get(p.mediaID)) === 'untagged')));
   const [count, setCount] = useState(1);
-  const [justOne, setJustOne] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [loaded, setLoaded] = useState<string>();
   const [settled, setSettled] = useState<string>();
@@ -75,11 +70,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   const current: Media | undefined = photos[focus];
   const currentTags = (current && tags.get(current.mediaID)) || NONE;
   const untagged = tagState(currentTags) === 'untagged';
-  const run = bursts[focus];
-  const burst = run && run.end - run.start < MAX_BURST && untaggedBurst(run, photos, tags) ? run : null;
-  const wholeBurst = !!burst && justOne !== burst.eventID;
   const shown = !!current && loaded === current.mediaID && settled === current.mediaID;
-  const burstIds = (b: Burst) => photos.slice(b.start, b.end + 1).map((p) => p.mediaID);
   const tagged = useMemo(() => photos.filter((p) => tagState(tags.get(p.mediaID)) !== 'untagged').length, [photos, tags]);
   const finished = photos.length > 0 && tagged === photos.length;
 
@@ -118,14 +109,8 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
 
   const apply = (tag: PhotoTag) => {
     if (!current) return;
-    const whole = wholeBurst ? burst : null;
     const label = tag.observationType === 'blank' ? NOTHING_HERE : `${tag.count > 1 ? `${tag.count} × ` : ''}${nameOf(tag)}`;
-    const where = whole ? `photos ${no(whole.start)} to ${no(whole.end)}` : `photo ${no(focus)}`;
-    const after = change(
-      whole ? burstIds(whole) : [current.mediaID],
-      (list) => addTag(list, whole ? { ...tag, eventID: whole.eventID } : tag),
-      `${label} on ${where}`,
-    );
+    const after = change([current.mediaID], (list) => addTag(list, tag), `${label} on photo ${no(focus)}`);
     if (!after || !untagged) return;
     for (let k = 1; k < photos.length; k++) {
       const i = (focus + k) % photos.length;
@@ -208,7 +193,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                 ↶ Undo
               </button>
             </div>
-            <Strip card={card} photos={photos} tags={tags} bursts={bursts} focus={focus} onPick={go} />
+            <Strip card={card} photos={photos} tags={tags} focus={focus} onPick={go} />
           </section>
 
           <aside className="border-t border-rule px-6 py-5 flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:overflow-y-auto min-[900px]:border-t-0 min-[900px]:border-l" aria-label="What’s in this photo?">
@@ -264,7 +249,6 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                 <span className="w-full text-center">Something else…</span>
               </BigChoice>
             </div>
-            {burst && <BurstChoice burst={burst} whole={wholeBurst} onChange={(whole) => setJustOne(whole ? null : burst.eventID)} />}
             {finished && (
               <a href="#" className={`self-start inline-flex h-14 items-center px-5 bg-ink text-paper text-[20px] ${focusRing}`}>
                 Back to the start
@@ -361,21 +345,18 @@ function NavButton({ side, hidden, onClick }: { side: 'left' | 'right'; hidden: 
   );
 }
 
-function Strip({ card, photos, tags, bursts, focus, onPick }: {
+function Strip({ card, photos, tags, focus, onPick }: {
   card: Card;
   photos: Media[];
   tags: Map<string, PhotoTag[]>;
-  bursts: (Burst | null)[];
   focus: number;
   onPick: (i: number) => void;
 }) {
   const start = Math.min(Math.max(0, focus - 2), Math.max(0, photos.length - STRIP));
-  const here = bursts[focus];
   return (
     <ol className="shrink-0 grid grid-cols-9 gap-2" aria-label="Photos on this card" data-testid="strip">
       {photos.slice(start, start + STRIP).map((p, k) => {
         const i = start + k;
-        const b = bursts[i];
         const done = tagState(tags.get(p.mediaID)) !== 'untagged';
         return (
           <li key={p.mediaID}>
@@ -388,35 +369,10 @@ function Strip({ card, photos, tags, bursts, focus, onPick }: {
               <Thumb card={card} mediaID={p.mediaID} alt="" />
               {done && <TaggedMark className="absolute top-1 left-1 w-[26%] aspect-square" />}
             </button>
-            <span
-              aria-hidden
-              className={`mt-2 block h-1.5 ${b ? (b === here ? 'bg-accent' : 'bg-ruleSoft') : ''} ${b && i < b.end && k < STRIP - 1 ? '-mr-2' : ''}`}
-            />
           </li>
         );
       })}
     </ol>
-  );
-}
-
-function BurstChoice({ burst, whole, onChange }: { burst: Burst; whole: boolean; onChange: (whole: boolean) => void }) {
-  const size = burst.end - burst.start + 1;
-  const option = (on: boolean) =>
-    `h-14 px-3 text-[20px] ${on ? 'bg-accent text-paper font-[600]' : 'bg-panel text-ink hover:bg-paperHover'} ${focusRing}`;
-  return (
-    <div className="mt-2 flex flex-col gap-3 border-l-4 border-accent pl-4" data-testid="burst">
-      <p className="text-[20px] leading-tight text-ink">
-        These {size} photos were taken together.
-      </p>
-      <div role="group" aria-label="Which photos to tag" className="grid grid-cols-2 border border-accent">
-        <button aria-pressed={whole} onClick={() => onChange(true)} className={option(whole)}>
-          Tag all {size}
-        </button>
-        <button aria-pressed={!whole} onClick={() => onChange(false)} className={option(!whole)}>
-          Just this one
-        </button>
-      </div>
-    </div>
   );
 }
 
