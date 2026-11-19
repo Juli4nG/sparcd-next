@@ -31,11 +31,11 @@ export function FocusView({
   panel: ReactNode;
   tools: ReactNode;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => closeRef.current?.focus(), []);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => dialogRef.current?.focus(), []);
   const label = `Photo ${position.toLocaleString()} of ${count.toLocaleString()}`;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-paper text-ink" role="dialog" aria-modal="true" aria-label="Large photo">
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[100] flex flex-col bg-paper text-ink outline-none" role="dialog" aria-modal="true" aria-label="Large photo">
       <div className="shrink-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-rule bg-panel px-3 py-1.5">
         <div className="min-w-0 truncate text-[15px] font-mono text-inkSoft" title={photo.fileName}>
           {photo.fileName}
@@ -49,7 +49,6 @@ export function FocusView({
         <div className="flex items-center justify-end gap-3">
           {tools}
           <button
-            ref={closeRef}
             onClick={onClose}
             className="min-h-11 px-3 inline-flex items-center gap-2 border border-rule text-[16px] text-inkSoft hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             title="Back to all photos (Esc)"

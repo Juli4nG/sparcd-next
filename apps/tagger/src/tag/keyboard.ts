@@ -41,14 +41,18 @@ export type KeyContext = {
 type Target = EventTarget | null;
 type Key = Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'repeat' | 'target' | 'preventDefault'>;
 
+const TEXT_INPUT = /^(text|search|number|email|password|tel|url)$/;
+const isTextInput = (el: HTMLElement) => el.tagName === 'INPUT' && TEXT_INPUT.test((el as HTMLInputElement).type || 'text');
+
 export const isTyping = (t: Target) => {
   const el = t as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  return !!el && (isTextInput(el) || el.tagName === 'TEXTAREA' || el.isContentEditable);
 };
 
+/** Buttons, links, selects and checkboxes keep their own Enter and Space; species keys still work on them. */
 const isControl = (t: Target) => {
   const el = t as HTMLElement | null;
-  return !!el && (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'SELECT');
+  return !!el && (['BUTTON', 'A', 'SELECT'].includes(el.tagName) || (el.tagName === 'INPUT' && !isTextInput(el)));
 };
 
 const isTile = (t: Target) => (t as HTMLElement | null)?.dataset?.testid === 'photo-tile';

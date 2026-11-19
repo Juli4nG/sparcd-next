@@ -104,6 +104,13 @@ describe('choosing', () => {
     expect(s.apply).not.toHaveBeenCalled();
   });
 
+  it('species keys still work after clicking a checkbox', () => {
+    const checkbox = { tagName: 'INPUT', type: 'checkbox' } as unknown as HTMLInputElement;
+    const s = context();
+    handleKey(key('y', { target: checkbox }), s);
+    expect(s.increment).toHaveBeenCalledWith(speciesTag(coyote));
+  });
+
   it('typing in a field stops "Set key" instead of binding the letter', () => {
     const input = { tagName: 'INPUT' } as unknown as HTMLInputElement;
     const s = context({ capturingFor: 'Canis latrans' });
