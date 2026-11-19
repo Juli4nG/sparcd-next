@@ -238,6 +238,7 @@ It's rewritten whenever the CSVs change.
   },
   "spatial": { "type": "Polygon", "coordinates": [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
   "temporal": { "start": "2026-11-02", "end": "2026-11-17" },
+  "taxonomic": [{ "scientificName": "Lynx rufus" }],
   "resources": [
     { "name": "deployments", "path": "deployments.csv", "profile": "tabular-data-resource", "format": "csv", "mediatype": "text/csv", "encoding": "utf-8",
       "schema": "https://raw.githubusercontent.com/tdwg/camtrap-dp/1.0/deployments-table-schema.json" },
@@ -250,11 +251,16 @@ It's rewritten whenever the CSVs change.
 - `spatial` is a `Point` when every deployment is at one position, and
   otherwise the bounding-box `Polygon`.
 - `temporal` takes its dates from the deployments' first and last times.
+- `taxonomic` is required by the profile. It lists each distinct
+  `scientificName` in `observations.csv`, sorted, and is `[]` when there are
+  none.
 - `name` is the bucket name. `title` and the contributor come from the person's
   display name, and `project.title` comes from `lab.json`.
-- Track A confirms the exact required fields against the published profile with
-  `uvx frictionless validate`. If the profile disagrees with this file, the
-  profile wins and this file is updated in the same change.
+- The published profile is the authority; this file follows it. Check a
+  package with
+  `uvx --with "jsonschema<4.18" frictionless validate datapackage.json`. The
+  pin is needed because the 1.0 profile's `#$defs/version` reference is
+  rejected by newer `jsonschema` releases.
 
 ## Writing safely
 

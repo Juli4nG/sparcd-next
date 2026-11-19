@@ -299,6 +299,25 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@20.19.41)(jsdom@26.1.0)
 
+  packages/bucket:
+    dependencies:
+      '@sparcd/camtrap':
+        specifier: workspace:*
+        version: link:../camtrap
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+    devDependencies:
+      '@types/node':
+        specifier: ^20.16.11
+        version: 20.19.41
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@20.19.41)(jsdom@26.1.0)
+
   packages/camtrap:
     devDependencies:
       '@types/node':
