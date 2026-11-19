@@ -501,7 +501,11 @@ function SomethingElse({ species, onPick, onClose }: { species: Species[]; onPic
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && results[0] && onPick(results[0])}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || !results[0]) return;
+            e.preventDefault();
+            onPick(results[0]);
+          }}
           aria-label="Search species"
           placeholder="Type a name, like fox"
           className="mt-4 w-full h-16 px-4 border-2 border-ink bg-panel text-[22px] text-ink placeholder:text-inkMute focus:outline focus:outline-[3px] focus:outline-offset-2 focus:outline-accent"
