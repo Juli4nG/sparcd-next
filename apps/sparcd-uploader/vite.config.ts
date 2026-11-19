@@ -8,9 +8,8 @@ const pkg = (name: string, entry: string) =>
   fileURLToPath(new URL(`../../packages/${name}/src/${entry}`, import.meta.url));
 
 export default defineConfig({
-  // Served from a subpath on GitHub Pages: culverlab.github.io/sparcd-exploration/uploader/
-  // A fork with another repo name sets PAGES_ROOT.
-  base: `${process.env.PAGES_ROOT ?? '/sparcd-exploration/'}uploader/`,
+  // Served by the gate's Caddy beside the new apps.
+  base: '/classic/upload/',
   server: { port: 5311 },
   plugins: [react()],
   // The dep scanner doesn't follow Web Workers, so exifr and hash-wasm (only
@@ -24,6 +23,7 @@ export default defineConfig({
       '@sparcd/auth-ui': pkg('auth-ui', 'index.ts'),
       '@sparcd/camtrap': pkg('camtrap', 'index.ts'),
       '@sparcd/flip': pkg('flip', 'index.ts'),
+      '@sparcd/bucket': pkg('bucket', 'index.ts'),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },

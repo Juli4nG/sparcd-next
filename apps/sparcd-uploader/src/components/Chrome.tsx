@@ -3,12 +3,14 @@ import { BrandSwitcher, ConnectionChip } from '@sparcd/auth-ui';
 import { useStore, type Section } from '../store';
 import { StatePill, type UploadState } from './StatePill';
 import { ConfirmNavigateAwayDialog } from './ConfirmNavigateAwayDialog';
+import { SHOW_OLD_STORAGE_FEATURES } from '../next/features';
 
-const SECTIONS: { id: Section; label: string }[] = [
+const SECTIONS = ([
   { id: 'new', label: 'New upload' },
   { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' },
-];
+  // History replays the old storage layout's upload records.
+] as { id: Section; label: string }[]).filter((s) => SHOW_OLD_STORAGE_FEATURES || s.id !== 'history');
 
 export function Chrome({ uploadState, children }: { uploadState: UploadState; children: ReactNode }) {
   const s3Config = useStore((s) => s.s3Config);
