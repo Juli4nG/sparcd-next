@@ -3,8 +3,9 @@ import { loadConfig, restoreSession, signOut, type About, type Config, type Sess
 import { CardList } from './CardList';
 import { loadCard, loadSettings, type Card } from './data/card';
 import { shareFromHash } from './data/share';
-import { saveEverything, unsavedEdits } from './data/useTagging';
+import { saveEverything, unsavedEdits, useTagging } from './data/useTagging';
 import { cardTitle } from './dates';
+import { simpleFlag } from './lib/simpleFlag';
 import { SharePage } from './share/SharePage';
 import { SignIn } from './SignIn';
 import { SimpleTag } from './simple/Simple';
@@ -17,7 +18,7 @@ const cardFromHash = () => {
   const m = /[#&]card=([^&]+)/.exec(location.hash);
   return m ? decodeURIComponent(m[1]) : null;
 };
-const simpleFromHash = () => /[#&]simple(&|$)/.test(location.hash);
+const simpleFromHash = () => simpleFlag(location.hash).simple;
 
 export function App() {
   const [start, setStart] = useState<Start | null>(null);
@@ -37,6 +38,8 @@ export function App() {
   };
   const leaveRef = useRef(leave);
   leaveRef.current = leave;
+  const open = useRef({ cardId, shareUrl });
+  open.current = { cardId, shareUrl };
 
   useEffect(() => {
     loadConfig()
@@ -46,6 +49,8 @@ export function App() {
       const next = cardFromHash();
       const share = shareFromHash();
       const nextSimple = simpleFromHash();
+      // Switching screens keeps the card and its tagging state open: nothing to save first.
+      if (next === open.current.cardId && share === open.current.shareUrl) return setSimple(nextSimple);
       void leaveRef.current(() => {
         setCardId(next);
         setShareUrl(share);
@@ -112,8 +117,18 @@ function CardPage({ session, cardId, simple }: { session: Session; cardId: strin
         This card isn't in your photos. <a className="text-accent underline" href="#">Go back to your cards</a>.
       </Message>
     );
-  const Screen = simple ? SimpleTag : Tag;
-  return <Screen session={session} about={state.about} species={state.species} card={state.card} title={cardTitle(state.card.deployment)} />;
+  return <CardScreen session={session} about={state.about} species={state.species} card={state.card} simple={simple} />;
+}
+
+/** One tagging state per open card, whichever screen shows it. */
+export function CardScreen({ session, about, species, card, simple }: { session: Session; about: About; species: Species[]; card: Card; simple: boolean }) {
+  const tagging = useTagging(session, about, card);
+  const title = cardTitle(card.deployment);
+  return simple ? (
+    <SimpleTag session={session} species={species} card={card} title={title} tagging={tagging} />
+  ) : (
+    <Tag species={species} card={card} title={title} tagging={tagging} />
+  );
 }
 
 function Leaving({ failed, onRetry, onLeave }: { failed: boolean; onRetry: () => void; onLeave: () => void }) {

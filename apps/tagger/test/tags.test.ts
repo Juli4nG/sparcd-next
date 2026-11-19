@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { tagRows, type Media } from '@sparcd/bucket';
-import { addTag, eventsFromRows, incrementTag, NOTHING, tagsFromRows, toBucketTags, type PhotoTag } from '../src/data/tags';
+import { addTag, incrementTag, NOTHING, removeTag, setCount, tagsFromRows, toBucketTags, type PhotoTag } from '../src/data/tags';
 
 const coyote: PhotoTag = { key: 'Canis latrans', observationType: 'animal', scientificName: 'Canis latrans', count: 1 };
 const unknown: PhotoTag = { key: 'unknown', observationType: 'unknown', scientificName: '', count: 2 };
@@ -28,13 +28,21 @@ describe('tags', () => {
   });
 });
 
-describe('eventsFromRows', () => {
-  it("keeps a photo's eventID only when all its rows share one", () => {
+describe('eventIDs', () => {
+  it('belong to each tag: read back from its own row and kept through edits to the other tags', () => {
     const rows = [
-      ...tagRows(media, [{ observationType: 'animal', scientificName: 'Canis latrans', count: 1 }, { observationType: 'unknown', count: 1 }], 'jd', { eventID: 'burst-1' }),
-      ...tagRows({ ...media, mediaID: 'g' }, [{ observationType: 'unknown', count: 1 }], 'jd', { eventID: 'burst-2' }),
-      ...tagRows({ ...media, mediaID: 'g' }, [{ observationType: 'blank' }], 'kl'),
+      ...tagRows(media, toBucketTags([coyote]), 'jd', { eventID: 'burst-1' }),
+      { ...tagRows(media, toBucketTags([coyote, unknown]), 'jd')[1], eventID: '' },
     ];
-    expect(eventsFromRows(rows)).toEqual(new Map([[media.mediaID, 'burst-1']]));
+    const read = tagsFromRows(rows).get(media.mediaID)!;
+    const burst = { ...coyote, eventID: 'burst-1' };
+    expect(read).toEqual([burst, unknown]);
+
+    const fox: PhotoTag = { key: 'Vulpes vulpes', observationType: 'animal', scientificName: 'Vulpes vulpes', count: 1 };
+    expect(addTag(read, fox)).toEqual([burst, unknown, fox]);
+    expect(incrementTag(read, unknown)).toEqual([burst, { ...unknown, count: 3 }]);
+    expect(incrementTag(read, coyote)).toEqual([{ ...burst, count: 2 }, unknown]);
+    expect(setCount(read, coyote.key, 4)).toEqual([{ ...burst, count: 4 }, unknown]);
+    expect(removeTag(read, unknown.key)).toEqual([burst]);
   });
 });

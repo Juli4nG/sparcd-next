@@ -45,7 +45,7 @@ afterAll(() => vi.unstubAllGlobals());
 describe('saving tags on a shared card', () => {
   it('decides ownership per photo, even when the shared card has the same id as one of the person\'s own', async () => {
     await savePackage(session.bucket, { deployments: () => [deployment('')], media: () => [mine] }, about);
-    const card: Card = { deployment: deployment('share:k3'), photos: [copied], tags: new Map(), events: new Map(), own: false, imageUrl: async () => '' };
+    const card: Card = { deployment: deployment('share:k3'), photos: [copied], tags: new Map(), own: false, imageUrl: async () => '' };
     await saveTags(session, about, card, [copied.mediaID], () => human, () => '2026-11-19T09:00:00-07:00');
     const own: Card = { ...card, deployment: deployment(''), photos: [mine], own: true };
     await saveTags(session, about, own, [mine.mediaID], () => human, () => '2026-11-19T09:00:00-07:00');
@@ -54,6 +54,16 @@ describe('saving tags on a shared card', () => {
     expect(rows.deployments.map((d) => d.deploymentGroups)).toEqual(['']);
     expect(rows.media.map((m) => [m.mediaID[0], m.filePublic])).toEqual([['a', 'false'], ['b', 'true']]);
     expect(rows.observations).toHaveLength(2);
+  });
+
+  it("writes each tag's own eventID, and none for a tag added to one photo", async () => {
+    await savePackage(session.bucket, { deployments: () => [deployment('')], media: () => [mine], observations: () => [] }, about);
+    const own: Card = { deployment: deployment(''), photos: [mine], tags: new Map(), own: true, imageUrl: async () => '' };
+    const deer: PhotoTag = { key: 'Odocoileus hemionus', observationType: 'animal', scientificName: 'Odocoileus hemionus', count: 1, eventID: 'burst-1' };
+    const fox: PhotoTag = { key: 'Vulpes vulpes', observationType: 'animal', scientificName: 'Vulpes vulpes', count: 1 };
+    await saveTags(session, about, own, [mine.mediaID], () => [deer, fox], () => '2026-11-19T09:00:00-07:00');
+    const rows = await readPackage(session.bucket);
+    expect(rows.observations.map((o) => [o.scientificName, o.eventID ?? ''])).toEqual([['Odocoileus hemionus', 'burst-1'], ['Vulpes vulpes', '']]);
   });
 
   it('reads expiry from the link itself', () => {

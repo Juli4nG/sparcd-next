@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { readPackage, type About, type Media, type Session, type Species } from '@sparcd/bucket';
-import { burstsOf, type Burst } from '../data/bursts';
+import { readPackage, type Media, type Session, type Species } from '@sparcd/bucket';
+import { burstsOf, untaggedBurst, type Burst } from '../data/bursts';
 import type { Card } from '../data/card';
 import type { SaveStatus } from '../data/saver';
 import { addTag, NOTHING, removeTag, setCount as setTagCount, speciesTag, tagState, type PhotoTag } from '../data/tags';
-import { useTagging } from '../data/useTagging';
+import type { Tagging } from '../data/useTagging';
+import { simpleFlag } from '../lib/simpleFlag';
 import { useSpeciesResults } from '../lib/useSpeciesResults';
-import { Dialog } from '../ui/Dialog';
+import { MAX_COUNT } from '../tag/AppliedSpecies';
+import { Dialog, dialogOpen } from '../ui/Dialog';
 import { TaggedMark, Thumb, useImageUrl } from '../ui/Photo';
 import { siteFavorites } from './favorites';
 import './simple.css';
@@ -18,23 +20,30 @@ const MAX_BURST = 12;
 const UNDO_LIMIT = 50;
 const NONE: PhotoTag[] = [];
 const NOTHING_HERE = 'Nothing here';
+/** A new photo takes tags only once it shows, and not sooner than this: a second click meant for the last photo lands on nothing. */
+const SETTLE_MS = 300;
 
 const focusRing = 'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-accent';
 const press = 'transition-transform duration-150 ease-out active:scale-[0.98] motion-reduce:transition-none';
 
-type Props = { session: Session; about: About; species: Species[]; card: Card; title: string };
+type Props = { session: Session; species: Species[]; card: Card; title: string; tagging: Tagging };
 
 /** The simpler tagging screen: one photo at a time, a few big answers, and it moves on by itself. */
 export function SimpleTag(props: Props) {
   const { session, species, card } = props;
-  const [favorites, setFavorites] = useState<Species[] | null>(null);
+  // A shared card, or one with no site, has no history of the person's own to rank by.
+  const bySite = card.own && !!card.deployment.locationID;
+  const labKeys = () => siteFavorites(species, [], new Set(), FAVORITES);
+  const [favorites, setFavorites] = useState<Species[] | null>(() => (bySite ? null : labKeys()));
   useEffect(() => {
-    const fallback = () => setFavorites(siteFavorites(species, [], new Set(), FAVORITES));
+    if (!bySite) return;
+    const fallback = () => setFavorites(labKeys());
     readPackage(session.bucket).then((rows) => {
       const site = new Set(rows.deployments.filter((d) => d.locationID === card.deployment.locationID).map((d) => d.deploymentID));
       setFavorites(siteFavorites(species, rows.observations, site, FAVORITES));
     }, fallback);
-  }, [session, species, card]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, species, card, bySite]);
   if (!favorites)
     return (
       <p role="status" className="h-full grid place-items-center text-[20px] text-inkMute">
@@ -44,17 +53,18 @@ export function SimpleTag(props: Props) {
   return <Screen {...props} favorites={favorites} />;
 }
 
-function Screen({ session, about, species, card, title, favorites }: Props & { favorites: Species[] }) {
-  const tagging = useTagging(session, about, card);
+function Screen({ species, card, title, tagging, favorites }: Props & { favorites: Species[] }) {
   const { tags } = tagging;
   const photos = card.photos;
   const bursts = useMemo(() => burstsOf(photos), [photos]);
   const byKey = useMemo(() => new Map(species.map((s) => [speciesTag(s).key, s])), [species]);
 
-  const [focus, setFocus] = useState(() => Math.max(0, photos.findIndex((p) => tagState(card.tags.get(p.mediaID)) === 'untagged')));
+  const [focus, setFocus] = useState(() => Math.max(0, photos.findIndex((p) => tagState(tags.get(p.mediaID)) === 'untagged')));
   const [count, setCount] = useState(1);
-  const [wholeBurst, setWholeBurst] = useState(false);
+  const [justOne, setJustOne] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
+  const [loaded, setLoaded] = useState<string>();
+  const [settled, setSettled] = useState<string>();
   const [receipt, setReceiptState] = useState<{ text: string; n: number } | null>(null);
   const setReceipt = (text: string) => setReceiptState((r) => ({ text, n: (r?.n ?? 0) + 1 }));
   const [keysUsed, setKeysUsed] = useState(false);
@@ -68,16 +78,18 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
   const currentTags = (current && tags.get(current.mediaID)) || NONE;
   const untagged = tagState(currentTags) === 'untagged';
   const run = bursts[focus];
-  const burst = run && run.end - run.start < MAX_BURST ? run : null;
+  const burst = run && run.end - run.start < MAX_BURST && untaggedBurst(run, photos, tags) ? run : null;
+  const wholeBurst = !!burst && justOne !== burst.eventID;
+  const shown = !!current && loaded === current.mediaID && settled === current.mediaID;
   const burstIds = (b: Burst) => photos.slice(b.start, b.end + 1).map((p) => p.mediaID);
   const tagged = useMemo(() => photos.filter((p) => tagState(tags.get(p.mediaID)) !== 'untagged').length, [photos, tags]);
   const finished = photos.length > 0 && tagged === photos.length;
 
-  // Arriving at a burst nobody has tagged yet, offer the whole burst.
   useEffect(() => {
-    setWholeBurst(!!burst && burstIds(burst).every((id) => tagState(latest.current.get(id)) === 'untagged'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [burst?.eventID]);
+    const id = current?.mediaID;
+    const timer = setTimeout(() => setSettled(id), SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [current?.mediaID]);
   // The next few large photos, so moving on shows them at once.
   useEffect(() => {
     for (const p of photos.slice(focus + 1, focus + 7))
@@ -96,6 +108,7 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
   const go = (i: number) => moveTo(Math.min(photos.length - 1, Math.max(0, i)));
 
   const change = (ids: string[], fn: (list: PhotoTag[]) => PhotoTag[], note: string) => {
+    if (!shown) return null;
     const before = latest.current;
     const after = tagging.edit(ids, fn);
     if (after === before) return null;
@@ -107,7 +120,7 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
 
   const apply = (tag: PhotoTag) => {
     if (!current) return;
-    const whole = burst && wholeBurst ? burst : null;
+    const whole = wholeBurst ? burst : null;
     const label = tag.observationType === 'blank' ? NOTHING_HERE : `${tag.count > 1 ? `${tag.count} × ` : ''}${nameOf(tag)}`;
     const where = whole ? `photos ${no(whole.start)} to ${no(whole.end)}` : `photo ${no(focus)}`;
     const after = change(
@@ -133,13 +146,13 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
 
   const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
   onKey.current = (e) => {
-    if (picker) return;
+    if (picker || dialogOpen()) return;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       return undo();
     }
     if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLInputElement) return;
-    const digit = /^[0-9]$/.test(e.key) ? Number(e.key) : -1;
+    const digit = /^[0-9]$/.test(e.key) && !e.repeat ? Number(e.key) : -1;
     if (digit > 0 && digit <= favorites.length) pickSpecies(favorites[digit - 1]);
     else if (digit === 0) apply(NOTHING);
     else if (e.key === 'ArrowRight') go(focus + 1);
@@ -166,16 +179,16 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
         <h1 className="min-w-0 truncate font-display text-[24px] font-[600] text-ink">{title}</h1>
         <Progress done={tagged} total={photos.length} />
         <SaveIndicator status={tagging.status} />
-        <a href={location.hash.replace(/&simple(?=&|$)/, '')} className={`shrink-0 min-h-11 inline-flex items-center text-[18px] text-inkSoft underline underline-offset-4 hover:text-ink ${focusRing}`}>
+        <a href={simpleFlag(location.hash).rest} className={`shrink-0 min-h-11 inline-flex items-center text-[18px] text-inkSoft underline underline-offset-4 hover:text-ink ${focusRing}`}>
           Back to the usual screen
         </a>
       </div>
 
       {current ? (
-        <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_clamp(440px,34vw,500px)]">
-          <section className="min-h-0 min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4" aria-label="Photo">
-            <div className="relative flex-1 min-h-0 bg-ink overflow-hidden">
-              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} />
+        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 min-[900px]:overflow-visible min-[900px]:grid-cols-[minmax(0,1fr)_clamp(440px,34vw,500px)]">
+          <section className="min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4 min-[900px]:min-h-0" aria-label="Photo">
+            <div className="relative aspect-[4/3] bg-ink overflow-hidden min-[900px]:aspect-auto min-[900px]:flex-1 min-[900px]:min-h-0">
+              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} onShown={() => setLoaded(current.mediaID)} />
               <NavButton side="left" hidden={focus === 0} onClick={() => go(focus - 1)} />
               <NavButton side="right" hidden={focus === photos.length - 1} onClick={() => go(focus + 1)} />
             </div>
@@ -203,17 +216,11 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
             <Strip card={card} photos={photos} tags={tags} bursts={bursts} focus={focus} onPick={go} />
           </section>
 
-          <aside className="min-h-0 overflow-y-auto border-l border-rule px-6 py-5 flex flex-col gap-4" aria-label="What’s in this photo?">
-            {finished ? (
-              <div>
-                <h2 className="font-display text-[30px] leading-tight font-[600] text-ok">Every photo is tagged. Thank you!</h2>
-                <a href="#" className={`mt-4 inline-flex h-14 items-center px-5 bg-ink text-paper text-[20px] ${focusRing}`}>
-                  Back to your cards
-                </a>
-              </div>
-            ) : (
-              <h2 className="font-display text-[30px] leading-none font-[600] text-ink">What’s in this photo?</h2>
-            )}
+          <aside className="border-t border-rule px-6 py-5 flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:overflow-y-auto min-[900px]:border-t-0 min-[900px]:border-l" aria-label="What’s in this photo?">
+            {/* Room for two lines either way, so the thank-you doesn't push the answers down. */}
+            <h2 className={`h-[4.75rem] shrink-0 font-display text-[30px] leading-tight font-[600] ${finished ? 'text-ok' : 'text-ink'}`}>
+              {finished ? 'Every photo is tagged. Thank you!' : 'What’s in this photo?'}
+            </h2>
 
             {untagged ? (
               <div className="h-14 flex items-center justify-between gap-3">
@@ -262,7 +269,12 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
                 <span className="w-full text-center">Something else…</span>
               </BigChoice>
             </div>
-            {burst && <BurstChoice burst={burst} whole={wholeBurst} onChange={setWholeBurst} />}
+            {burst && <BurstChoice burst={burst} whole={wholeBurst} onChange={(whole) => setJustOne(whole ? null : burst.eventID)} />}
+            {finished && (
+              <a href="#" className={`self-start inline-flex h-14 items-center px-5 bg-ink text-paper text-[20px] ${focusRing}`}>
+                Back to your cards
+              </a>
+            )}
           </aside>
         </div>
       ) : (
@@ -313,7 +325,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
-function BigPhoto({ card, photo, alt }: { card: Card; photo: Media; alt: string }) {
+function BigPhoto({ card, photo, alt, onShown }: { card: Card; photo: Media; alt: string; onShown: () => void }) {
   const { url, failed } = useImageUrl(card, photo.mediaID, 'view');
   const [loaded, setLoaded] = useState<string>();
   const [broken, setBroken] = useState<string>();
@@ -327,7 +339,10 @@ function BigPhoto({ card, photo, alt }: { card: Card; photo: Media; alt: string 
           src={url}
           alt={alt}
           draggable={false}
-          onLoad={() => setLoaded(url)}
+          onLoad={() => {
+            setLoaded(url);
+            onShown();
+          }}
           onError={() => setBroken(url)}
           className={`absolute inset-0 w-full h-full object-contain select-none transition-opacity duration-200 ease-out motion-reduce:transition-none ${loaded === url ? 'opacity-100' : 'opacity-0'}`}
         />
@@ -420,7 +435,7 @@ function Stepper({ value, onChange, label, inRow }: { value: number; onChange: (
       <output aria-live="polite" className="w-12 text-center text-[24px] font-[600] tabular-nums text-ink">
         {value}
       </output>
-      <button onClick={() => onChange(Math.min(99, value + 1))} aria-label="One more" className={step}>
+      <button onClick={() => onChange(value + 1)} disabled={value >= MAX_COUNT} aria-label="One more" className={step}>
         +
       </button>
     </div>

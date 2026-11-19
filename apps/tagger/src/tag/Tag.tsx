@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { About, Session, Species } from '@sparcd/bucket';
+import type { Species } from '@sparcd/bucket';
 import { groupBursts } from '../data/bursts';
 import type { Card } from '../data/card';
 import type { SaveStatus } from '../data/saver';
 import { addTag, incrementTag, NOTHING, removeTag, setCount, speciesKey, tagState, type PhotoTag } from '../data/tags';
-import { useTagging } from '../data/useTagging';
+import type { Tagging } from '../data/useTagging';
 import { effectiveKey, keyLabel, resolveKeys, useKeyOverrides } from '../lib/keys';
 import { nearestVisibleIndex, nextVisibleIndex, shownChoice, tagTargets, toggleSelectionWithFocus, visibleRangeSet } from '../lib/selection';
 import { StandaloneModifierGesture } from '../lib/standaloneModifier';
+import { simpleFlag } from '../lib/simpleFlag';
 import { useSpeciesResults } from '../lib/useSpeciesResults';
-import { Dialog, DialogHeader } from '../ui/Dialog';
+import { Dialog, DialogHeader, dialogOpen } from '../ui/Dialog';
 import { AppliedSpecies, NOTHING_LABEL } from './AppliedSpecies';
 import { Cheatsheet } from './Cheatsheet';
 import { FocusView } from './FocusView';
@@ -34,8 +35,7 @@ function readAdvance(): boolean {
   }
 }
 
-export function Tag({ session, about, species, card, title }: { session: Session; about: About; species: Species[]; card: Card; title: string }) {
-  const tagging = useTagging(session, about, card);
+export function Tag({ species, card, title, tagging }: { species: Species[]; card: Card; title: string; tagging: Tagging }) {
   const { tags, edit } = tagging;
   const keys = useKeyOverrides();
   const photos = card.photos;
@@ -222,7 +222,9 @@ export function Tag({ session, about, species, card, title }: { session: Session
     get searchInput() {
       return searchRef.current;
     },
-    modalOpen,
+    get modalOpen() {
+      return modalOpen || dialogOpen();
+    },
     targetHas: (key) => targets.length === 1 && !!tags.get(photos[targets[0]].mediaID)?.some((t) => t.key === key),
     setCountPrefix,
     captureKey,
@@ -379,7 +381,7 @@ export function Tag({ session, about, species, card, title }: { session: Session
         <h1 className="min-w-0 truncate font-display text-[22px] font-[600] text-ink">{title}</h1>
         <div className="ml-auto shrink-0 flex items-center gap-3">
           <a
-            href={`${location.hash}&simple`}
+            href={`${simpleFlag(location.hash).rest}&simple`}
             className="min-h-11 inline-flex items-center px-2 text-[16px] text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           >
             Try the simpler screen

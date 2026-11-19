@@ -3,12 +3,18 @@ import { createPortal } from 'react-dom';
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+let openDialogs = 0;
+
+/** True while any Dialog is open, wherever it was opened: a screen's shortcuts wait for it. */
+export const dialogOpen = () => openDialogs > 0;
+
 /** A modal card: keeps Tab inside, closes on Escape or a click outside, and gives focus back. */
 export function Dialog({ label, onClose, children, wide }: { label: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
+    openDialogs++;
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -30,6 +36,7 @@ export function Dialog({ label, onClose, children, wide }: { label: string; onCl
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
+      openDialogs--;
       window.removeEventListener('keydown', onKey, true);
       previous?.focus();
     };
