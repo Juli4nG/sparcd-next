@@ -230,6 +230,7 @@ function Screen({ session, about, species, card, title, favorites }: Props & { f
                     <span className="flex-1 min-w-0 truncate text-[20px] font-[550] text-ink">{nameOf(t)}</span>
                     {t.observationType !== 'blank' && (
                       <Stepper
+                        inRow
                         value={t.count}
                         label={`How many ${nameOf(t)}`}
                         onChange={(n) => change([current.mediaID], (list) => setTagCount(list, t.key, n), `${n} × ${nameOf(t)} on photo ${no(focus)}`)}
@@ -409,10 +410,10 @@ function BurstChoice({ burst, whole, onChange }: { burst: Burst; whole: boolean;
   );
 }
 
-function Stepper({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+function Stepper({ value, onChange, label, inRow }: { value: number; onChange: (n: number) => void; label: string; inRow?: boolean }) {
   const step = `w-14 h-14 grid place-items-center text-[28px] leading-none text-ink hover:bg-paperHover disabled:text-ruleSoft disabled:hover:bg-transparent ${focusRing}`;
   return (
-    <div role="group" aria-label={label} className="shrink-0 flex items-center border border-rule bg-panel">
+    <div role="group" aria-label={label} className={`shrink-0 flex items-center bg-panel ${inRow ? 'self-stretch border-x border-ruleSoft' : 'border border-rule'}`}>
       <button onClick={() => onChange(value - 1)} disabled={value <= 1} aria-label="One fewer" className={step}>
         −
       </button>
