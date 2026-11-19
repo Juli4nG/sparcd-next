@@ -190,7 +190,8 @@ export function Connection({
 
     // Offline: skip the probe entirely and keep today's optimistic accept —
     // this is purely additive for the online case.
-    if (!online || !onTestConnection) {
+    // Behind the gate the check is the sign-in itself, so it always runs.
+    if ((!online && !sameOrigin) || !onTestConnection) {
       onConnect(config, remember);
       return;
     }
