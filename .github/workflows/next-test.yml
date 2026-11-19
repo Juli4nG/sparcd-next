@@ -1,0 +1,40 @@
+name: Next tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Camtrap and bucket libraries
+        run: |
+          pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" test
+          pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" check
+
+      - name: Uploader
+        run: |
+          pnpm --filter uploader test
+          pnpm --filter uploader check
+
+      - name: Tagger
+        if: hashFiles('apps/tagger/package.json') != ''
+        run: |
+          pnpm --filter tagger test
+          pnpm --filter tagger check
+
+      - name: Gate unit tests
+        run: pnpm --filter gate test
