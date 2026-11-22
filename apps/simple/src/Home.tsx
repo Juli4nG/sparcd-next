@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readPackage, type Session } from '@sparcd/bucket';
-import { cardSummaries, type CardSummary } from './data/card';
+import type { Deployment, Session } from '@sparcd/bucket';
+import { readUploads, type CardSummary } from './data/card';
 import { TAG_URL } from './App';
 import { deploymentLine, rangeOf } from './cardLine';
 import { PawStamp } from './ui/Paw';
@@ -12,19 +12,19 @@ const ALL = '';
 const siteOf = (c: CardSummary) => c.deployment.locationName || c.deployment.locationID || '';
 const rangeOfCard = (c: CardSummary) => rangeOf(c.deployment.deploymentGroups);
 
-const tagHref = (c: CardSummary) => `${TAG_URL}#card=${encodeURIComponent(c.deployment.deploymentID)}`;
+const tagHref = (d: Deployment) => `${TAG_URL}#card=${encodeURIComponent(d.deploymentID)}`;
 
 export function Home({ session, mode }: { session: Session; mode: 'upload' | 'tag' }) {
+  const [uploads, setUploads] = useState<Deployment[] | null>(null);
   const [cards, setCards] = useState<CardSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [site, setSite] = useState(ALL);
   const [range, setRange] = useState(ALL);
 
   useEffect(() => {
-    readPackage(session.bucket).then(
-      (rows) => setCards(cardSummaries(rows)),
-      () => setFailed(true),
-    );
+    const read = readUploads(session.bucket);
+    read.uploads.then(setUploads, () => {});
+    read.cards.then(setCards, () => setFailed(true));
   }, [session]);
 
   const sites = useMemo(() => [...new Set((cards ?? []).map(siteOf))].filter(Boolean).sort(), [cards]);
@@ -42,7 +42,7 @@ export function Home({ session, mode }: { session: Session; mode: 'upload' | 'ta
           </a>
         ) : (
           <a
-            href={shown[0] ? tagHref(shown[0]) : undefined}
+            href={shown[0] ? tagHref(shown[0].deployment) : undefined}
             aria-disabled={!shown[0]}
             className={`h-32 flex flex-col items-center justify-center gap-1 border-2 ${
               shown[0] ? `bg-ink text-paper border-ink hover:opacity-90 ${press}` : 'bg-transparent text-inkMute border-ruleSoft cursor-default'
@@ -87,7 +87,7 @@ export function Home({ session, mode }: { session: Session; mode: 'upload' | 'ta
               {shown.map((c) => (
                 <li key={c.deployment.deploymentID} data-testid="card-row">
                   <a
-                    href={tagHref(c)}
+                    href={tagHref(c.deployment)}
                     className={`flex items-center gap-6 px-5 py-4 bg-panel border border-rule hover:border-ink hover:bg-panelHover ${focusRing}`}
                   >
                     <span className="min-w-0 flex-1">
@@ -108,7 +108,7 @@ export function Home({ session, mode }: { session: Session; mode: 'upload' | 'ta
         </section>
         )}
 
-        {mode === 'upload' && !!cards?.length && <Sent cards={cards} />}
+        {mode === 'upload' && !(uploads && !uploads.length) && <Uploads uploads={uploads} cards={cards} failed={failed} />}
       </div>
     </main>
   );
@@ -134,38 +134,56 @@ function Filter({ label, all, value, options, onChange }: { label: string; all: 
   );
 }
 
-/** Every upload, closed until asked for. */
-function Sent({ cards }: { cards: CardSummary[] }) {
+/** Every upload, closed until asked for. The list shows once deployments.csv is in; the counts follow. */
+function Uploads({ uploads, cards, failed }: { uploads: Deployment[] | null; cards: CardSummary[] | null; failed: boolean }) {
+  const counts = useMemo(() => new Map((cards ?? []).map((c) => [c.deployment.deploymentID, c])), [cards]);
+  const count = (id: string, n: 'photos' | 'tagged') => {
+    const c = counts.get(id);
+    return c ? c[n].toLocaleString() : failed ? '' : '…';
+  };
   return (
-    <details className="group border-t border-rule pt-4">
+    <details className="group border-t border-rule pt-4" data-testid="uploads">
       <summary className={`list-none cursor-pointer min-h-12 inline-flex items-center gap-3 text-[20px] text-inkSoft hover:text-ink ${focusRing}`}>
         <span aria-hidden className="inline-block transition-transform group-open:rotate-90">
           ›
         </span>
-        Your uploads ({cards.length.toLocaleString()})
+        Your uploads{uploads && ` (${uploads.length.toLocaleString()})`}
+        {failed ? (
+          <span role="alert" className="text-[18px] text-warn">
+            We couldn't load them. Check your internet connection, then reload the page.
+          </span>
+        ) : (
+          !uploads && (
+            <span role="status" className="text-[18px] text-inkMute">
+              Loading…
+            </span>
+          )
+        )}
       </summary>
-      <table className="mt-3 w-full text-left text-[17px]">
-        <thead className="text-inkMute text-[15px]">
-          <tr className="border-b border-ruleSoft">
-            <th className="py-2 pr-4 font-[500]">Upload</th>
-            <th className="py-2 pr-4 font-[500] text-right">Photos</th>
-            <th className="py-2 font-[500] text-right">Tagged</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cards.map((c) => (
-            <tr key={c.deployment.deploymentID} className="border-b border-ruleSoft">
-              <td className="py-2.5 pr-4">
-                <a href={tagHref(c)} className={`text-ink underline underline-offset-4 decoration-ruleSoft hover:decoration-ink ${focusRing}`}>
-                  {deploymentLine(c.deployment)}
-                </a>
-              </td>
-              <td className="py-2.5 pr-4 text-right tabular-nums">{c.photos.toLocaleString()}</td>
-              <td className="py-2.5 text-right tabular-nums">{c.tagged.toLocaleString()}</td>
+      {uploads && (
+        <table className="mt-3 w-full text-left text-[17px]">
+          <thead className="text-inkMute text-[15px]">
+            <tr className="border-b border-ruleSoft">
+              <th className="py-2 pr-4 font-[500]">Upload</th>
+              <th className="py-2 pr-4 font-[500] text-right">Photos</th>
+              <th className="py-2 font-[500] text-right">Tagged</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {uploads.map((d) => (
+              <tr key={d.deploymentID} className="border-b border-ruleSoft">
+                <td className="py-2.5 pr-4">
+                  <a href={tagHref(d)} className={`text-ink underline underline-offset-4 decoration-ruleSoft hover:decoration-ink ${focusRing}`}>
+                    {deploymentLine(d)}
+                  </a>
+                </td>
+                <td className="py-2.5 pr-4 text-right tabular-nums">{count(d.deploymentID, 'photos')}</td>
+                <td className="py-2.5 text-right tabular-nums">{count(d.deploymentID, 'tagged')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </details>
   );
 }

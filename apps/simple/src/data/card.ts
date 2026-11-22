@@ -5,7 +5,7 @@ import {
   mergeMedia,
   parseLab,
   parseSpecies,
-  readPackage,
+  readTable,
   replaceObservations,
   savePackage,
   tagRows,
@@ -16,6 +16,7 @@ import {
   type Changes,
   type Deployment,
   type Media,
+  type Observation,
   type PackageRows,
   type Session,
   type Species,
@@ -37,6 +38,8 @@ export type Card = {
   tags: Map<string, PhotoTag[]>;
   own: boolean;
   imageUrl: (mediaID: string, size: ImageSize, fresh?: boolean) => Promise<string>;
+  /** Every card at this card's site and their tags, to rank the species buttons. */
+  site: { cards: Set<string>; observations: Observation[] };
 };
 
 export type CardSummary = { deployment: Deployment; photos: number; tagged: number; untagged: number };
@@ -50,10 +53,14 @@ export async function loadSettings(session: Session): Promise<{ about: About; sp
 }
 
 /** The person's own cards, newest first. */
+export const ownCards = (deployments: Deployment[]): Deployment[] =>
+  deployments.filter((d) => !isShared(d)).sort((a, b) => instant(b.deploymentEnd) - instant(a.deploymentEnd));
+
+/** The person's own cards with their counts, newest first. */
 export function cardSummaries(rows: PackageRows): CardSummary[] {
   const tags = tagsFromRows(rows.observations);
   const byCard = new Map<string, CardSummary>();
-  for (const d of rows.deployments) if (!isShared(d)) byCard.set(d.deploymentID, { deployment: d, photos: 0, tagged: 0, untagged: 0 });
+  for (const d of ownCards(rows.deployments)) byCard.set(d.deploymentID, { deployment: d, photos: 0, tagged: 0, untagged: 0 });
   for (const m of rows.media) {
     const card = byCard.get(m.deploymentID);
     if (!card) continue;
@@ -61,7 +68,24 @@ export function cardSummaries(rows: PackageRows): CardSummary[] {
     if (tagState(tags.get(m.mediaID)) === 'untagged') card.untagged++;
     else card.tagged++;
   }
-  return [...byCard.values()].sort((a, b) => instant(b.deployment.deploymentEnd) - instant(a.deployment.deploymentEnd));
+  return [...byCard.values()];
+}
+
+const readRows = (bucket: Bucket) => {
+  const deployments = readTable(bucket, 'deployments');
+  const rows = Promise.all([deployments, readTable(bucket, 'media'), readTable(bucket, 'observations')]).then(
+    ([deployments, media, observations]): PackageRows => ({ deployments, media, observations }),
+  );
+  return { deployments, rows };
+};
+
+/**
+ * The upload list as soon as deployments.csv arrives, and the counts once
+ * media.csv and observations.csv do. All three are read at once, each a single time.
+ */
+export function readUploads(bucket: Bucket): { uploads: Promise<Deployment[]>; cards: Promise<CardSummary[]> } {
+  const { deployments, rows } = readRows(bucket);
+  return { uploads: deployments.then(ownCards), cards: rows.then(cardSummaries) };
 }
 
 export const byTime = (a: Media, b: Media) =>
@@ -85,7 +109,7 @@ export function bucketImages(bucket: Bucket): Card['imageUrl'] {
 
 /** Null when the person has no such card. */
 export async function loadCard(session: Session, deploymentID: string): Promise<Card | null> {
-  const rows = await readPackage(session.bucket);
+  const rows = await readRows(session.bucket).rows;
   const deployment = rows.deployments.find((d) => d.deploymentID === deploymentID);
   if (!deployment) return null;
   const photos = rows.media.filter((m) => m.deploymentID === deploymentID).sort(byTime);
@@ -97,6 +121,10 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
     tags: tagsFromRows(observations),
     own: !isShared(deployment),
     imageUrl: bucketImages(session.bucket),
+    site: {
+      cards: new Set(rows.deployments.filter((d) => d.locationID === deployment.locationID).map((d) => d.deploymentID)),
+      observations: rows.observations,
+    },
   };
 }
 

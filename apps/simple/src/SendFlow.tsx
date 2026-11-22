@@ -327,7 +327,7 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
       <input
         ref={picker}
         type="file"
-        aria-label="Card"
+        aria-label="Folder of photos"
         hidden
         // @ts-expect-error webkitdirectory is not in React's input attributes
         webkitdirectory=""
@@ -344,8 +344,8 @@ type Problem = { message: string; signIn?: boolean };
 
 function explain(err: unknown): Problem {
   const cause = err instanceof PhotoError ? err.cause : err;
-  if (cause instanceof S3Error && cause.status === 403) return { message: 'You were signed out. Sign in again, then choose the same card. Photos already saved are not sent twice.', signIn: true };
-  if (cause instanceof Error && cause.name === 'NotFoundError') return { message: 'The photos couldn’t be read. Check the memory card is still in. Uploading will try again by itself.' };
+  if (cause instanceof S3Error && cause.status === 403) return { message: 'You were signed out. Sign in again, then choose the same folder. Photos already uploaded are not uploaded twice.', signIn: true };
+  if (cause instanceof Error && cause.name === 'NotFoundError') return { message: 'The photos couldn’t be read. Check the folder is still there. Uploading will try again by itself.' };
   return { message: 'Uploading paused for a moment. It will carry on by itself.' };
 }
 

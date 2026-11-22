@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { readPackage, type Media, type Session, type Species } from '@sparcd/bucket';
+import { type Media, type Session, type Species } from '@sparcd/bucket';
 import type { Card } from '../data/card';
 import type { SaveStatus } from '../data/saver';
 import { addTag, NOTHING, removeTag, setCount as setTagCount, speciesTag, tagState, type PhotoTag } from '../data/tags';
@@ -25,26 +25,10 @@ type Props = { session: Session; species: Species[]; card: Card; title: string; 
 
 /** The simpler tagging screen: one photo at a time, a few big answers, and it moves on by itself. */
 export function SimpleTag(props: Props) {
-  const { session, species, card } = props;
+  const { species, card } = props;
   // A shared card, or one with no site, has no history of the person's own to rank by.
   const bySite = card.own && !!card.deployment.locationID;
-  const labKeys = () => siteFavorites(species, [], new Set(), FAVORITES);
-  const [favorites, setFavorites] = useState<Species[] | null>(() => (bySite ? null : labKeys()));
-  useEffect(() => {
-    if (!bySite) return;
-    const fallback = () => setFavorites(labKeys());
-    readPackage(session.bucket).then((rows) => {
-      const site = new Set(rows.deployments.filter((d) => d.locationID === card.deployment.locationID).map((d) => d.deploymentID));
-      setFavorites(siteFavorites(species, rows.observations, site, FAVORITES));
-    }, fallback);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, species, card, bySite]);
-  if (!favorites)
-    return (
-      <p role="status" className="h-full grid place-items-center text-[20px] text-inkMute">
-        Loading the photos…
-      </p>
-    );
+  const favorites = useMemo(() => siteFavorites(species, card.site.observations, bySite ? card.site.cards : new Set(), FAVORITES), [species, card, bySite]);
   return <Screen {...props} favorites={favorites} />;
 }
 
@@ -257,7 +241,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
           </aside>
         </div>
       ) : (
-        <p className="p-8 text-[20px] text-inkSoft">This card has no photos.</p>
+        <p className="p-8 text-[20px] text-inkSoft">This upload has no photos.</p>
       )}
 
       {picker && (
@@ -354,7 +338,7 @@ function Strip({ card, photos, tags, focus, onPick }: {
 }) {
   const start = Math.min(Math.max(0, focus - 2), Math.max(0, photos.length - STRIP));
   return (
-    <ol className="shrink-0 grid grid-cols-9 gap-2" aria-label="Photos on this card" data-testid="strip">
+    <ol className="shrink-0 grid grid-cols-9 gap-2" aria-label="Photos in this upload" data-testid="strip">
       {photos.slice(start, start + STRIP).map((p, k) => {
         const i = start + k;
         const done = tagState(tags.get(p.mediaID)) !== 'untagged';
