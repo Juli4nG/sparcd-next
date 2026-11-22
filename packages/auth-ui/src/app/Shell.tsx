@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { loadConfig, restoreSession, signOut, type Config, type Session } from '@sparcd/bucket';
 import { BrandSwitcher } from '../BrandSwitcher';
 import { ConnectionChip } from '../ConnectionChip';
-import { clearSharedConnection, loadSessionConnection } from '../session';
+import { clearSharedConnection, loadSessionConnection, subscribeSharedConnection } from '../session';
 import { loadSharedTheme, saveSharedTheme, type Theme } from '../theme';
 import { GateSignIn } from './GateSignIn';
 import { PawStamp } from './Paw';
@@ -58,6 +58,12 @@ export function Shell({
     loadConfig()
       .then(async (config) => setStart({ config, session: await restoreSession(config) }))
       .catch(() => setStart({ failed: true }));
+    // Logging out in one tab logs out every open tab, including duplicates that copied this one's sign-in.
+    return subscribeSharedConnection((cfg) => {
+      if (cfg) return;
+      signOut();
+      setStart((s) => (s && 'config' in s ? { config: s.config, session: null } : s));
+    }, () => null);
   }, []);
 
   if (!start) return <Message>Loading…</Message>;

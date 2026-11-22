@@ -190,11 +190,18 @@ test('old /simple/ and /classic/ paths go to the new apps', async () => {
   await expect(page).toHaveURL('/tag/');
 });
 
-test('signs out', async () => {
+test('signs out, in every open tab', async () => {
   await page.goto('/upload/');
   await expect(page.getByRole('link', { name: 'Upload photos' })).toBeVisible();
+  // A tab opened from this one starts with a copy of its sign-in.
+  const [other] = await Promise.all([page.waitForEvent('popup'), page.evaluate(() => void window.open('/tag/'))]);
+  await expect(other.getByRole('heading', { name: 'Photos to tag' })).toBeVisible();
   await page.getByRole('button', { name: 'Logout' }).click();
   await expect(page.getByRole('textbox', { name: 'Login name' })).toBeVisible();
+  await expect(other.getByRole('textbox', { name: 'Login name' })).toBeVisible();
+  await other.reload();
+  await expect(other.getByRole('textbox', { name: 'Login name' })).toBeVisible();
+  await other.close();
   await page.goto('/tag/');
   await expect(page.getByRole('textbox', { name: 'Login name' })).toBeVisible();
 });
