@@ -100,7 +100,8 @@ SMOKE_ENDPOINT=http://localhost:8080 SMOKE_LOGIN=ana SMOKE_PASSWORD="$ANA_PASSWO
 ### Vite dev servers
 
 A dev server proxies to the gate with its own Host, which is what the browser
-signs. Ports 5173 to 5176 are in the local `ALLOWED_HOSTS`.
+signs. The Uploader and Tagger dev ports, 5191 and 5192, and ports 5173 to 5176
+are in the local `ALLOWED_HOSTS`.
 
 ```js
 // vite.config.ts
