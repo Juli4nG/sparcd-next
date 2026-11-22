@@ -157,11 +157,14 @@ test('gate HTTP requests and responses', async (t) => {
     }
   });
 
-  await t.test('upstream requests time out with S3 XML', async (subtest) => {
-    const timeout = AbortSignal.timeout;
+  await t.test('upstream requests time out with S3 XML', { timeout: 10_000 }, async (subtest) => {
+    // A real AbortSignal.timeout can be garbage-collected before it fires, which
+    // once left this test waiting 300 s; this timer's closure holds the controller.
     subtest.mock.method(AbortSignal, 'timeout', (ms) => {
       assert.equal(ms, 60_000);
-      return timeout(100);
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException('timed out', 'TimeoutError')), 100);
+      return controller.signal;
     });
     for (const key of ['slow', 'slow-error']) {
       const res = await call(`${bucket}/${key}`);
