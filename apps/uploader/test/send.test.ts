@@ -40,12 +40,12 @@ const card = ['IMG_1.JPG', 'BAD.JPG', 'IMG_2.JPG'].map((n) => ({ path: `DCIM/${n
 const site = { locationID: 'x', locationName: 'X', latitude: 31.5, longitude: -110.5, deploymentGroups: '' };
 const lab = { title: 'Lab', timeZone: 'America/Phoenix', shareLicenses: [] };
 
-const send = (session: Session, deploymentID = 'x_2026-11-17') =>
+const send = (session: Session, deploymentID = 'x_2026-11-17', files = card) =>
   sendCard({
     session,
     lab,
     details: Promise.resolve({ site, deploymentID, comments: '' }),
-    card,
+    card: files,
     reads: new Map(),
     onProgress: () => {},
     signal: new AbortController().signal,
@@ -76,5 +76,13 @@ describe('sendCard', () => {
     expect(puts).toEqual([]);
     expect(store.has('datapackage.json')).toBe(true);
     expect((await send(session, 'x_2026-11-18')).cardHasPhotos).toBe(false);
+  });
+
+  it('finishes without writing a package when a fresh bucket gets no usable photo', async () => {
+    const { store, session } = fakeSession();
+    const outcome = await send(session, 'x_2026-11-17', card.filter((c) => c.file.name === 'BAD.JPG'));
+    expect(outcome.leftOut).toEqual(['BAD.JPG']);
+    expect(outcome.cardHasPhotos).toBe(false);
+    expect([...store.keys()]).toEqual([]);
   });
 });

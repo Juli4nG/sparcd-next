@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { S3Error, type Session } from '@sparcd/bucket';
 import { openShards } from '../src/send/shards';
 
+const config = vi.hoisted(() => ({ gate: true }));
+vi.mock('@sparcd/bucket', async (actual) => ({ ...(await actual<object>()), loadConfig: async () => config }));
+
 const HOST = 'server.example.org';
 const EXTRA = [8443, 8444, 8445, 8446, 8447, 8448, 8449];
 const session = { bucket: { name: 'sparcd-next-ana' } } as unknown as Session;
@@ -37,6 +40,7 @@ const onlyExtra =
     c.method === 'GET' ? (ports.some((p) => c.host === origin(p)) ? 200 : 'network') : then(c);
 
 beforeEach(() => {
+  config.gate = true;
   vi.spyOn(console, 'info').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -175,5 +179,18 @@ describe('openShards put', () => {
       await expect(shards.put('Media/a/view.jpg', bytes, SHA)).rejects.toBeInstanceOf(TypeError);
       expect(puts()).toHaveLength(5);
     });
+  });
+});
+
+describe('openShards without a gate', () => {
+  it('stores each photo through the signed-in bucket, write-once, and probes nothing', async () => {
+    page();
+    config.gate = false;
+    const putObject = vi.fn(async () => 'stored' as const);
+    const shards = await openShards({ bucket: { name: 'sparcd-next-ana', putObject } } as unknown as Session);
+    await shards.put('Media/x/view.jpg', bytes, SHA);
+    expect(shards.live()).toBe(1);
+    expect(putObject).toHaveBeenCalledWith('Media/x/view.jpg', bytes, { contentType: 'image/jpeg', sha256: SHA });
+    expect(calls).toEqual([]);
   });
 });

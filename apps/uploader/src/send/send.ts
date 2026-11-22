@@ -108,9 +108,11 @@ export async function sendCard(job: Job): Promise<Outcome> {
     job.onProgress({ phase: 'sending', done, total, startedAt, sentBefore });
 
     let saving: Promise<unknown> = Promise.resolve();
+    let wrote = false;
     const save = (photos: Photo[]): Promise<PackageRows> => {
       const { site, deploymentID, comments } = details!;
       const rows = photos.map((p) => mediaRow(p, deploymentID));
+      wrote ||= rows.length > 0;
       const changes: Changes = rows.length
         ? {
             deployments: (d) => mergeDeployments(d, [{ ...deploymentRow(site, deploymentID, rows, cameraModel), deploymentComments: comments }], 'widen'),
@@ -154,14 +156,16 @@ export async function sendCard(job: Job): Promise<Outcome> {
     details = await job.details;
     const { deploymentID } = details;
     for (let i = 0; i < pending.length; i += CHECKPOINT_EVERY) await save(pending.slice(i, i + CHECKPOINT_EVERY));
-    const saved = await save([]);
+    // The last save rewrites datapackage.json, repairing an earlier interrupted
+    // write. A bucket with no photo rows at all has no package to describe yet.
+    const saved = wrote || known.size ? await save([]) : null;
     const t2 = performance.now();
     return {
       total,
       alreadySaved: plan.skip.length,
       leftOut,
       deploymentID,
-      cardHasPhotos: saved.media.some((m) => m.deploymentID === deploymentID),
+      cardHasPhotos: !!saved?.media.some((m) => m.deploymentID === deploymentID),
       timings: { readMs: t1 - t0, sendMs: t2 - t1, totalMs: t2 - t0 },
     };
   } finally {

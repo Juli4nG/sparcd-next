@@ -1,5 +1,5 @@
 import { AwsClient } from 'aws4fetch';
-import { S3Error, type Session } from '@sparcd/bucket';
+import { S3Error, loadConfig, type Session } from '@sparcd/bucket';
 
 /**
  * Photo PUTs spread round-robin over the gate's extra ports (8443-8449) next
@@ -28,6 +28,12 @@ export type Shards = {
 };
 
 export async function openShards(session: Session): Promise<Shards> {
+  // Without a gate (a config.json at the origin) storage is elsewhere and has no extra ports.
+  if (!(await loadConfig()).gate)
+    return {
+      live: () => 1,
+      put: async (key, body, sha256) => void (await session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256 })),
+    };
   const { login, password } = JSON.parse(sessionStorage.getItem(SIGNIN_KEY)!) as { login: string; password: string };
   const aws = new AwsClient({ accessKeyId: login, secretAccessKey: password, service: 's3', region: 'us-east-1', retries: 0 });
   const host = location.hostname;
