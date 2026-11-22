@@ -4,34 +4,16 @@ import { Message, PawStamp, TAG_URL, useOnline, bigPrimary, bigSecondary, focusR
 import { cardLine, rangeOf } from './cardLine';
 import { scanDrop, scanFileList, type CardFile } from './send/scan';
 import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
-import { timeLeft } from './send/words';
+import { daysAgo, folderOf, guessFromFolder } from './send/folder';
+import { newPaceMemo, paceTick, type PaceMemo } from './send/pace';
 import type { ReadResult } from './workers/photo.worker';
 
 type Step = 'card' | 'site' | 'date' | 'notes' | 'send';
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const isoDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const daysAgo = (n: number) => isoDay(new Date(Date.now() - n * 86_400_000));
 const longDay = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 const photos = (n: number) => `${n.toLocaleString()} photo${n === 1 ? '' : 's'}`;
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-
-/** The folder the photos came from: the first part of their path, when they sit in one. */
-function folderOf(card: CardFile[]): string {
-  const first = card[0]?.path ?? '';
-  return first.includes('/') ? first.slice(0, first.indexOf('/')) : '';
-}
-
-/** Liz's folders read "WHE19_09.28.26_119.images": Site ID, the day the card came out (MM.DD.YY), photo count. */
-function guessFromFolder(folder: string, sites: Site[]): { site?: Site; date?: string } {
-  const m = /^([^_]+)_(\d{2})\.(\d{2})\.(\d{2})(?:_|\.|$)/.exec(folder);
-  if (!m) return {};
-  const site = sites.find((s) => s.locationID.toLowerCase() === m[1].toLowerCase());
-  const date = `20${m[4]}-${m[2]}-${m[3]}`;
-  const valid = !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= daysAgo(0);
-  return { site, date: valid ? date : undefined };
-}
 
 type Deferred = { promise: Promise<Details>; resolve: (d: Details) => void };
 const deferred = (): Deferred => {
@@ -442,32 +424,15 @@ function useUpload(session: Session, lab: Lab | undefined, card: CardFile[], sta
 function usePace(progress: Progress | undefined, card: CardFile[]): { speed: string; left: string } {
   const [pace, setPace] = useState({ speed: '', left: '' });
   const avgBytes = card.length ? card.reduce((n, c) => n + c.file.size, 0) / card.length : 0;
-  const memo = useRef<{ at: number; done: number; rate?: number; shownMs?: number; shownAt: number }>({ at: 0, done: 0, shownAt: 0 });
+  const memo = useRef<PaceMemo>(newPaceMemo());
   const latest = useRef(progress);
   latest.current = progress;
   useEffect(() => {
     const id = setInterval(() => {
       const p = latest.current;
-      const m = memo.current;
-      const now = performance.now();
       if (!p || p.phase !== 'sending') return;
-      if (!m.at) return void Object.assign(m, { at: now, done: p.done });
-      const dt = (now - m.at) / 1000;
-      if (dt < 2) return;
-      const instant = (p.done - m.done) / dt;
-      m.rate = m.rate === undefined ? instant : m.rate * 0.75 + instant * 0.25;
-      Object.assign(m, { at: now, done: p.done });
-      if (!m.rate) return;
-      const speed = `${((m.rate * avgBytes) / 1_000_000).toFixed(1)} MB per second`;
-      let left = pace.left;
-      if (p.done - p.sentBefore >= 3 && now - p.startedAt >= 5_000 && (m.shownMs === undefined || now - m.shownAt >= 15_000)) {
-        let ms = ((p.total - p.done) / m.rate) * 1000;
-        if (m.shownMs !== undefined) ms = Math.min(ms, m.shownMs * 1.25);
-        m.shownMs = ms;
-        m.shownAt = now;
-        left = timeLeft(ms);
-      }
-      setPace((old) => ({ speed, left: left || old.left }));
+      const next = paceTick(memo.current, p, performance.now(), avgBytes);
+      if (next) setPace((old) => ({ speed: next.speed, left: next.left ?? old.left }));
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
