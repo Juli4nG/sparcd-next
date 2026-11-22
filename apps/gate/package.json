@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/unit.test.mjs",
+    "test": "node --expose-gc --test test/unit.test.mjs",
     "test:e2e": "node --test test/e2e.test.mjs",
     "local:up": "node local/up.mjs",
     "local:down": "node local/down.mjs"

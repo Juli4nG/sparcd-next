@@ -158,13 +158,26 @@ test('gate HTTP requests and responses', async (t) => {
   });
 
   await t.test('upstream requests time out with S3 XML', { timeout: 10_000 }, async (subtest) => {
-    // A real AbortSignal.timeout can be garbage-collected before it fires, which
-    // once left this test waiting 300 s; this timer's closure holds the controller.
+    // undici's Request follows its signal through a weak reference, so after a
+    // garbage collection the abort can be lost and the test waits for Node's
+    // 300 s request timeout. Holding every request and its controller keeps the
+    // abort deterministic.
+    const held = [];
     subtest.mock.method(AbortSignal, 'timeout', (ms) => {
       assert.equal(ms, 60_000);
       const controller = new AbortController();
-      setTimeout(() => controller.abort(new DOMException('timed out', 'TimeoutError')), 100);
+      held.push(controller);
+      // With --expose-gc, collect first: the worst case for a lost abort.
+      setTimeout(() => {
+        globalThis.gc?.();
+        controller.abort(new DOMException('timed out', 'TimeoutError'));
+      }, 100);
       return controller.signal;
+    });
+    const realFetch = globalThis.fetch;
+    subtest.mock.method(globalThis, 'fetch', (input, init) => {
+      held.push(input);
+      return realFetch(input, init);
     });
     for (const key of ['slow', 'slow-error']) {
       const res = await call(`${bucket}/${key}`);
