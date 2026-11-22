@@ -51,8 +51,8 @@ dashboard.
 
 - **pnpm 10** + **Turborepo 2** at the root; Node 24.
 - **uv** for the Explorer's Python environment (`apps/sparcd-explorer`).
-- Tests: vitest in the packages and the two apps, Playwright in `e2e/`, `node --test` in the gate
-  and home. CI is `.github/workflows/next-test.yml`.
+- Tests: vitest in the packages and the two apps, Playwright in `e2e/`,
+  `node --test` in the gate. CI is `.github/workflows/next-test.yml`.
 
 ## Storage access scope
 

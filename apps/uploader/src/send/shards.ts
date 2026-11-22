@@ -32,7 +32,7 @@ export async function openShards(session: Session): Promise<Shards> {
   const aws = new AwsClient({ accessKeyId: login, secretAccessKey: password, service: 's3', region: 'us-east-1', retries: 0 });
   const host = location.hostname;
   const shards: Shard[] = [
-    { origin: `https://${host}`, primary: true, alive: true },
+    { origin: location.origin, primary: true, alive: true },
     ...EXTRA_PORTS.map((port) => ({ origin: `https://${host}:${port}`, primary: false, alive: false })),
   ];
 

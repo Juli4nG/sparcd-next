@@ -88,7 +88,7 @@ pnpm --filter gate test          # unit; `test:e2e` runs against MinIO
 # Browser tests (Chromium) against the local stack
 pnpm --filter uploader --filter tagger build
 node apps/gate/local/up.mjs
-pnpm --filter e2e test
+pnpm --filter e2e test:browser
 node apps/gate/local/down.mjs
 ```
 

@@ -64,6 +64,19 @@ async function waitFor(name, url, init) {
   throw new Error(`${name} did not come up; see ${join(RUN, `${name}.log`)}`);
 }
 
+/** The gate's environment on the local stack; `openAdmin(localGateEnv())` manages people there. */
+export function localGateEnv(secrets = readSecrets()) {
+  return {
+    UPSTREAM: 'http://127.0.0.1:9000',
+    S3_ACCESS_KEY_ID: secrets.MINIO_ROOT_USER,
+    S3_SECRET_ACCESS_KEY: secrets.MINIO_ROOT_PASSWORD,
+    ACCESS_MASTER_KEY: secrets.ACCESS_MASTER_KEY,
+    // Local MinIO runs without TLS, and storage refuses customer keys over plain HTTP.
+    DATA_KEY: 'none',
+    ALLOWED_HOSTS,
+  };
+}
+
 async function main() {
   mkdirSync(RUN, { recursive: true });
   if (existsSync(PIDS) && Object.values(JSON.parse(readFileSync(PIDS, 'utf8'))).some(alive)) {
@@ -78,15 +91,7 @@ async function main() {
   secrets.ACCESS_MASTER_KEY ??= randomBytes(32).toString('base64');
   writeSecrets(secrets);
 
-  const gateEnv = {
-    UPSTREAM: 'http://127.0.0.1:9000',
-    S3_ACCESS_KEY_ID: secrets.MINIO_ROOT_USER,
-    S3_SECRET_ACCESS_KEY: secrets.MINIO_ROOT_PASSWORD,
-    ACCESS_MASTER_KEY: secrets.ACCESS_MASTER_KEY,
-    // Local MinIO runs without TLS, and storage refuses customer keys over plain HTTP.
-    DATA_KEY: 'none',
-    ALLOWED_HOSTS,
-  };
+  const gateEnv = localGateEnv(secrets);
   const pids = {};
   const record = () => writeFileSync(PIDS, JSON.stringify(pids));
 
@@ -133,7 +138,9 @@ async function main() {
     + `logs in ${RUN}; stop with \`node local/down.mjs\`\n`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`local up failed: ${err.message}\n`);
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    process.stderr.write(`local up failed: ${err.message}\n`);
+    process.exitCode = 1;
+  });
+}

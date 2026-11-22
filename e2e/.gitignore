@@ -1,0 +1,4 @@
+test-results/
+playwright-report/
+# The test person's login and password for this run.
+.auth/

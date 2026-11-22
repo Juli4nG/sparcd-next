@@ -12,7 +12,9 @@ export function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  useEffect(() => window.scrollTo(0, 0), [hash]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [hash]);
   return (
     <Shell toolName="Uploader" busy={sending}>
       {(session) => (hash === '#send' ? <SendFlow session={session} onSending={setSending} /> : <Home session={session} />)}

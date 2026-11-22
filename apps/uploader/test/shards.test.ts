@@ -16,7 +16,7 @@ let calls: Call[];
 function page(answer: (c: Call) => Answer = () => 200) {
   calls = [];
   vi.stubGlobal('sessionStorage', { getItem: (k: string) => (k === 'sparcd-next.signin' ? JSON.stringify({ login: 'ana', password: 'pw' }) : null) });
-  vi.stubGlobal('location', { hostname: HOST });
+  vi.stubGlobal('location', { hostname: HOST, origin: `https://${HOST}` });
   vi.stubGlobal('fetch', async (req: Request) => {
     const url = new URL(req.url);
     const call = { method: req.method, host: url.host, path: url.pathname, headers: req.headers };

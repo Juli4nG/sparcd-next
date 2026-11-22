@@ -34,7 +34,9 @@ export function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  useEffect(() => window.scrollTo(0, 0), [cardId]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [cardId]);
 
   return (
     <>
