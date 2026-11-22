@@ -67,6 +67,8 @@ async function photoShown(n: number) {
   await expect(img).toHaveClass(/opacity-100/);
   await expect(img).toHaveJSProperty('complete', true);
   expect(await img.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
+  // Answers count only once the photo has settled on screen (SETTLE_MS in tag/Simple.tsx).
+  await expect(page.getByRole('region', { name: 'Photo' })).toHaveAttribute('data-shown', 'true');
 }
 
 const saved = () => expect(page.locator('[data-save-status]')).toHaveText('Saved ✓');
