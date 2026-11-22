@@ -8,11 +8,20 @@
 			header_up Host {http.request.hostport}
 		}
 	}
+	# CSV and JSON reads go out compressed; photos are already compressed and pass as they are.
 	handle /sparcd-next-* {
+		encode zstd gzip
 		reverse_proxy 127.0.0.1:8787 {
 			header_up Host {http.request.hostport}
 		}
 	}
+
+	# The earlier versions' addresses.
+	redir /simple/upload* /upload/
+	redir /classic/upload* /upload/
+	redir /simple/tag* /tag/
+	redir /classic/tag* /tag/
+	redir /simple* /
 
 	redir /upload /upload/
 	handle_path /upload/* {
@@ -25,14 +34,6 @@
 	redir /tag /tag/
 	handle_path /tag/* {
 		root * /srv/sparcd-next/tag
-		try_files {path} /index.html
-		encode zstd gzip
-		file_server
-	}
-
-	redir /simple /simple/
-	handle_path /simple/* {
-		root * /srv/sparcd-next/simple
 		try_files {path} /index.html
 		encode zstd gzip
 		file_server

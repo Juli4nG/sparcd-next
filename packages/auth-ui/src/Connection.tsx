@@ -125,7 +125,9 @@ export function Connection({
       case 'unreachable':
         return `Couldn't reach ${endpoint.trim() || 'the endpoint'}. Check the address, then try again.`;
       case 'credentials-rejected':
-        return 'The server rejected this access key and secret key. Check them and try again.';
+        return gate
+          ? 'That login name and password didn’t work. Check them and try again.'
+          : 'The server rejected this access key and secret key. Check them and try again.';
       case 'probe-denied':
         return (
           "Unable to confirm your credentials. The server denied this check, which needs " +
@@ -190,7 +192,8 @@ export function Connection({
 
     // Offline: skip the probe entirely and keep today's optimistic accept —
     // this is purely additive for the online case.
-    if (!online || !onTestConnection) {
+    // Behind the gate the check is the sign-in itself, so it always runs.
+    if ((!online && !gate) || !onTestConnection) {
       onConnect(config, remember);
       return;
     }
@@ -244,7 +247,7 @@ export function Connection({
         )}
 
         <div className="mb-4 space-y-2">
-          <OfflineBanner message="You're offline — connecting needs a network connection." />
+          <OfflineBanner message={gate ? "No internet. You can sign in when it's back." : "You're offline — connecting needs a network connection."} />
           {showMixedContentWarning && (
             <div
               role="status"
@@ -286,7 +289,7 @@ export function Connection({
           </div>}
           <div>
             <label htmlFor="accessKey" className={fieldLabel}>
-              Access key
+              {gate ? 'Login name' : 'Access key'}
             </label>
             <input
               id="accessKey"
@@ -301,7 +304,7 @@ export function Connection({
           </div>
           <div>
             <label htmlFor="secretKey" className={fieldLabel}>
-              Secret key
+              {gate ? 'Password' : 'Secret key'}
             </label>
             <input
               id="secretKey"
@@ -323,11 +326,11 @@ export function Connection({
               onChange={(e) => setRemember(e.target.checked)}
               disabled={pending}
             />
-            {gate ? 'Remember access key on this device' : <>Remember endpoint &amp; access key on this device</>}
+            {gate ? 'Remember login name on this device' : <>Remember endpoint &amp; access key on this device</>}
           </label>
           <p id={rememberHelpId} className="font-body text-[13px] text-inkMute italic">
             {gate
-              ? "(Don't set remember access key if on a public computer)"
+              ? "(Don't set remember login name if on a public computer)"
               : <>(Don't set remember endpoint &amp; access key if on a public computer)</>}
           </p>
         </div>

@@ -17,6 +17,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@sparcd/bucket": "workspace:*",
     "@sparcd/types": "workspace:*",
     "zustand": "^5.0.0"
   },

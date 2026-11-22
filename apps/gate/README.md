@@ -59,7 +59,7 @@ node --env-file=<env file> cli.mjs settings put lab.json sites.csv species.json
 The password is the only thing on stdout. The CLI never deletes anything.
 `settings-example/` holds a made-up lab, sites and species list to start from.
 
-## Local recipe (Windows or Apple-silicon Mac)
+## Local recipe (Windows, Apple-silicon Mac or Linux x64)
 
 One origin, `http://localhost:8080`, laid out like the server:
 

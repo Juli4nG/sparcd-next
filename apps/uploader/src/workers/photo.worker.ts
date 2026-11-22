@@ -1,5 +1,5 @@
 import exifr from 'exifr';
-import { stripJpeg } from '../lib/stripJpeg';
+import { stripJpeg } from '../send/stripJpeg';
 
 export type ReadResult = {
   sha256: string;

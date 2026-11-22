@@ -16,10 +16,17 @@ http://:8080 {
 		}
 	}
 	handle /sparcd-next-* {
+		encode zstd gzip
 		reverse_proxy 127.0.0.1:8787 {
 			header_up Host {http.request.hostport}
 		}
 	}
+
+	redir /simple/upload* /upload/
+	redir /classic/upload* /upload/
+	redir /simple/tag* /tag/
+	redir /classic/tag* /tag/
+	redir /simple* /
 
 	redir /upload /upload/
 	handle_path /upload/* {
