@@ -1,24 +1,25 @@
 # SPARC'd Next
 
 Camera-trap photos from SD card to tagged data, in two steps. A volunteer signs
-in, sends a card's photos to their own storage, and tags what's in them. Their
+in, uploads a folder of photos to their own storage, and tags what's in them. Their
 storage stays one valid [Camtrap DP 1.0](https://camtrap-dp.tdwg.org/) package
 at every moment, so any tool that reads Camtrap DP can read it.
 
 ## The apps
 
-- **`apps/uploader`** (served at `/upload/`) sends an SD card's photos to the
+- **`apps/uploader`** (served at `/upload/`) uploads a folder of photos to the
   person's own bucket. It reads each photo's EXIF, hashes it, makes a thumbnail
-  and a viewing copy, and saves the card as one deployment in the package.
-- **`apps/tagger`** (served at `/tag/`) opens a card and tags its photos with
-  species and counts, with keyboard shortcuts and autosave. Tags save back to
-  the same package.
+  and a viewing copy, and saves the upload as one deployment in the package.
+  Its start screen lists the person's uploads.
+- **`apps/tagger`** (served at `/tag/`) lists the uploads with photos left to
+  tag and tags them one photo at a time, with species, counts and autosave.
+  Tags save back to the same package.
 - **`apps/gate`** is a small access proxy for storage that has one key for a
   whole project. Each person signs in with their own login and password and
   reaches only their own bucket plus the readable part of the lab's settings
   bucket.
-- **`apps/sparcd-home`** is the landing page at `/`, with a large button for
-  each app.
+- **`apps/sparcd-home`** is the static start page at `/`, with a large button
+  for each app.
 - **`apps/sparcd-explorer`** is a [marimo](https://marimo.io) notebook that
   loads a collection's Camtrap DP CSVs and shows a hex-binned map, a species
   dashboard and drill-in tabs. It runs locally or as a static Pyodide bundle.
@@ -27,6 +28,7 @@ at every moment, so any tool that reads Camtrap DP can read it.
 | --- | --- |
 | `packages/bucket` (`@sparcd/bucket`) | the storage library: sign-in, S3 client, reading and writing the package, settings, ids and times |
 | `packages/camtrap` (`@sparcd/camtrap`) | the Camtrap DP data contract: CSV readers and writers, merge, time shift |
+| `packages/auth-ui` (`@sparcd/auth-ui`) | the Uploader and Tagger's shared sign-in, header, dialog and look |
 
 ## Storage
 
@@ -78,15 +80,20 @@ The Explorer publishes to GitHub Pages from `.github/workflows/pages.yml`.
 ## Tests
 
 ```sh
-pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" test
+pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" --filter "@sparcd/auth-ui" test
 pnpm --filter uploader test
 pnpm --filter tagger test
 pnpm --filter gate test          # unit; `test:e2e` runs against MinIO
-pnpm --filter sparcd-home test
+
+# Browser tests (Chromium) against the local stack
+pnpm --filter uploader --filter tagger build
+node apps/gate/local/up.mjs
+pnpm --filter e2e test
+node apps/gate/local/down.mjs
 ```
 
-`.github/workflows/next-test.yml` runs the libraries, apps and the gate's unit
-tests on every push, along with typechecks.
+`.github/workflows/next-test.yml` runs the typechecks, the unit tests, the
+builds and the browser tests on every push.
 
 ## Toolchain
 

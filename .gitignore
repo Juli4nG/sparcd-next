@@ -33,3 +33,4 @@ __marimo__/
 
 # Tagger: local MinIO binary, data and config for dev runs
 apps/tagger/.local/
+apps/uploader/.local/
