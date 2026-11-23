@@ -12,6 +12,9 @@ The Uploader, the Tagger and the sign-in share it through `packages/auth-ui`:
   `quietLink`, `focusRing`, `press`.
 - `src/app/Shell.tsx`, `src/app/Dialog.tsx`: the header and the dialog.
 
+The start page, `apps/sparcd-home`, is plain HTML with no build step. It keeps its own
+copy of the token values it uses, so update that copy whenever `look.css` changes.
+
 Use these before writing new styles. A look test in each app and in auth-ui
 fails on anything that breaks the rules marked **(checked)**.
 
