@@ -6,7 +6,7 @@ import { scanDrop, scanFileList, type CardFile } from './send/scan';
 import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
 import { daysAgo, folderOf, guessFromFolder } from './send/folder';
 import { newPaceMemo, paceTick, type PaceMemo } from './send/pace';
-import { files, tally } from './send/words';
+import { files, tally, uploadedLine, wasWere } from './send/words';
 import type { ReadResult } from './workers/photo.worker';
 
 type Step = 'card' | 'site' | 'date' | 'notes' | 'send';
@@ -539,10 +539,10 @@ function Done({ outcome, line, card }: { outcome: Outcome; line: string; card: C
           ✓
         </p>
         <h1 className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="saved">
-          {out.photos + out.videos ? `${files(saved)} are uploaded` : `All ${files(all)} are uploaded`}
+          {uploadedLine(saved, all)}
         </h1>
         <p className="-mt-2 text-[22px] text-inkSoft">{line}</p>
-        {outcome.alreadySaved.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.alreadySaved)} were already uploaded before.</p>}
+        {outcome.alreadySaved.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.alreadySaved)} {wasWere(outcome.alreadySaved)} already uploaded before.</p>}
         {outcome.leftOut.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.leftOut)} couldn’t be read, so they were left out.</p>}
         {outcome.notCleaned.length > 0 && (
           <p className="text-[22px] text-inkSoft">

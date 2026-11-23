@@ -400,7 +400,7 @@ test('a 100 MB video uploads while the page keeps answering', async () => {
   await page.context().unrouteAll({ behavior: 'wait' });
   await chooseFolder(bigVideo, '1 video found');
   await answerQuestions(bigVideo);
-  await expect(page.getByTestId('saved')).toHaveText(/^All 1 video/, { timeout: 30_000 });
+  await expect(page.getByTestId('saved')).toHaveText('The video is uploaded',{ timeout: 30_000 });
   await page.context().route(SPECIES_PICTURES, (route) => route.abort());
   // Uploading the video as bytes held the main thread for about 5 s here, and minutes at 200 MB.
   expect(await page.evaluate(() => (window as unknown as { longest: number }).longest)).toBeLessThan(1000);

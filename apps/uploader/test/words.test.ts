@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { count, files, formatBytes, number, tally, timeLeft } from '../src/send/words';
+import { count, files, formatBytes, number, tally, timeLeft, uploadedLine, wasWere } from '../src/send/words';
 
 const MIN = 60_000;
 
@@ -56,5 +56,23 @@ describe('files', () => {
     expect(files(tally(['A.MP4']))).toBe('1 video');
     expect(files(tally(['A.JPG', 'B.JPG', 'C.mp4', 'D.MOV']))).toBe('2 photos and 2 videos');
     expect(files({ photos: 1200, videos: 1 })).toBe('1,200 photos and 1 video');
+  });
+});
+
+describe('uploadedLine', () => {
+  it('agrees with one file and says All only for more than one', () => {
+    expect(uploadedLine({ photos: 0, videos: 1 }, { photos: 0, videos: 1 })).toBe('The video is uploaded');
+    expect(uploadedLine({ photos: 1, videos: 0 }, { photos: 1, videos: 0 })).toBe('The photo is uploaded');
+    expect(uploadedLine({ photos: 3, videos: 2 }, { photos: 3, videos: 2 })).toBe('All 3 photos and 2 videos are uploaded');
+  });
+
+  it('counts only what went up when some were left out', () => {
+    expect(uploadedLine({ photos: 1, videos: 0 }, { photos: 1, videos: 1 })).toBe('1 photo is uploaded');
+    expect(uploadedLine({ photos: 4, videos: 0 }, { photos: 4, videos: 1 })).toBe('4 photos are uploaded');
+  });
+
+  it('says was for one file and were for more', () => {
+    expect(wasWere(['a.jpg'])).toBe('was');
+    expect(wasWere(['a.jpg', 'b.jpg'])).toBe('were');
   });
 });
