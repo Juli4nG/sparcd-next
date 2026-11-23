@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { S3Error, deploymentId, parseLab, parseSites, type Lab, type Session, type Site } from '@sparcd/bucket';
-import { Message, PawStamp, TAG_URL, useOnline, bigPrimary, bigSecondary, focusRing, quietLink } from '@sparcd/auth-ui';
+import { Message, PawTrail, TAG_URL, useOnline, bigPrimary, bigSecondary, focusRing, quietLink } from '@sparcd/auth-ui';
 import { cardLine, rangeOf } from './cardLine';
 import { scanDrop, scanFileList, type CardFile } from './send/scan';
 import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
@@ -268,7 +268,7 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
       >
         {state === 'looking' ? (
           <>
-            <PawStamp />
+            <PawTrail />
             <p className="text-lead text-inkSoft">Looking for photos…</p>
           </>
         ) : found ? (

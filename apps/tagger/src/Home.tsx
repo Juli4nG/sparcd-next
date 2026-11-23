@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PawStamp, focusRing, press } from '@sparcd/auth-ui';
+import { PawTrail, focusRing, press } from '@sparcd/auth-ui';
 import type { Deployment, Session } from '@sparcd/bucket';
 import { readCards, type CardSummary } from './data/card';
 import { deploymentLine, rangeOf } from './cardLine';
@@ -61,7 +61,7 @@ export function Home({ session }: { session: Session }) {
             </p>
           ) : !cards ? (
             <div role="status" className="grid justify-items-center gap-4 py-10">
-              <PawStamp />
+              <PawTrail />
               <p className="text-body text-inkSoft">Loading…</p>
             </div>
           ) : !cards.length ? (

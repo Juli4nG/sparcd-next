@@ -5,7 +5,7 @@ import { ConnectionChip } from '../ConnectionChip';
 import { clearSharedConnection, loadSessionConnection, subscribeSharedConnection } from '../session';
 import { loadSharedTheme, saveSharedTheme, type Theme } from '../theme';
 import { GateSignIn } from './GateSignIn';
-import { PawStamp } from './Paw';
+import { PawTrail } from './Paw';
 import { focusRing } from './look';
 
 loadSessionConnection();
@@ -109,7 +109,7 @@ export function Shell({
 export function Message({ children, warn }: { children: ReactNode; warn?: boolean }) {
   return (
     <div className="h-full grid place-content-center justify-items-center gap-5 p-8 bg-paper">
-      {!warn && <PawStamp />}
+      {!warn && <PawTrail />}
       <p role={warn ? 'alert' : 'status'} className={`text-body max-w-[36rem] text-center ${warn ? 'text-warn' : 'text-inkSoft'}`}>
         {children}
       </p>

@@ -76,8 +76,8 @@ body {
   }
 }
 
-/* Empty-state frontispiece: staggered settle-in, a left-pointing cue that
-   nudges toward the rail, and motion-detection rings behind the paw stamp. */
+/* Empty-state frontispiece: staggered settle-in and a left-pointing cue that
+   nudges toward the rail. */
 @keyframes fn-rise {
   from {
     opacity: 0;
@@ -99,20 +99,6 @@ body {
   }
 }
 
-@keyframes fn-scan {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.5;
-  }
-  70% {
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1.7);
-    opacity: 0;
-  }
-}
-
 /* `backwards` shows the 0% frame during the delay, then settles to the
    element's natural opacity:1 — so a skipped/broken animation never strands
    the content invisible. */
@@ -124,14 +110,8 @@ body {
   animation: fn-nudge 1.8s ease-in-out infinite;
 }
 
-.fn-scan {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: fn-scan 3.2s ease-out infinite;
-}
-
-/* Focus loader: each track fades in, holds, then fades behind the animal. The
-   loader itself waits 200ms so a fast load never flashes it. */
+/* The loader: each track fades in, holds, then fades behind the animal. Over a
+   photo it waits 200ms (fn-appear) so a fast load never flashes it. */
 @keyframes fn-step {
   0% {
     opacity: 0;
@@ -179,12 +159,8 @@ body {
     animation: none;
   }
   .fn-nudge,
-  .fn-scan,
   .fn-step {
     animation: none;
-  }
-  .fn-scan {
-    opacity: 0;
   }
   .fn-breathe {
     animation: none;

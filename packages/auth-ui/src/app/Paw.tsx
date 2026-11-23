@@ -14,7 +14,8 @@ export function PawPads() {
 const STEPS = [0, 1, 2, 3, 4, 5];
 
 // Tracks crossing the frame in an alternating gait, each fading behind the
-// animal, while a full-size image is on its way.
+// animal, while a full-size image is on its way. Drawn in the text colour, so
+// it reads on paper and on the Tagger's dark photo frame alike.
 export function PawTrail() {
   return (
     <svg width="260" height="90" viewBox="0 0 260 90" aria-hidden>
@@ -22,36 +23,13 @@ export function PawTrail() {
         <g
           key={i}
           className="fn-step"
-          fill="var(--ink)"
+          fill="currentColor"
           transform={`translate(${8 + i * 42} ${i % 2 ? 44 : 14}) rotate(90 16 16) scale(0.3)`}
           style={{ animationDelay: `${i * 0.28}s` }}
         >
           <PawPads />
         </g>
       ))}
-    </svg>
-  );
-}
-// A pressed wildcat track ringed by idle motion-sensor pulses.
-export function PawStamp() {
-  return (
-    <svg width="108" height="108" viewBox="0 0 108 108" fill="none" aria-hidden role="img">
-      {[0, 1.05, 2.1].map((delay, i) => (
-        <circle
-          key={i}
-          className="fn-scan"
-          cx="54"
-          cy="54"
-          r="30"
-          stroke="var(--accent)"
-          strokeWidth="1"
-          fill="none"
-          style={{ animationDelay: `${delay}s` }}
-        />
-      ))}
-      <g fill="var(--ink)" opacity="0.9">
-        <PawPads />
-      </g>
     </svg>
   );
 }

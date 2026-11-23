@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Media } from '@sparcd/bucket';
-import { focusRing } from '@sparcd/auth-ui';
+import { PawTrail, focusRing } from '@sparcd/auth-ui';
 import type { Card } from '../data/card';
 import { useImageUrl } from './Photo';
 import { BRIGHTEN, DOUBLE_TAP_ZOOM, NO_ZOOM, ORIGINAL_AT, brightenFilter, clampZoom, contained, isVideo, zoomAt, type Size, type Zoom } from './view';
@@ -122,7 +122,12 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   const zoomed = zoom.s > 1;
   return (
     <>
-      {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-frameInk fn-breathe" />}
+      {loaded !== url && (
+        <div role="status" className="fn-appear absolute inset-0 grid place-content-center justify-items-center gap-4 text-frameInk">
+          <PawTrail />
+          <span className="text-small text-frameInk/70">Loading {alt.toLowerCase()}</span>
+        </div>
+      )}
       <svg aria-hidden width="0" height="0" className="absolute">
         {BRIGHTEN.slice(1).map((b, i) => (
           <filter key={b.state} id={`brighten-${i + 1}`} colorInterpolationFilters="sRGB">

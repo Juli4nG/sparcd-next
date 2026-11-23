@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PawPads } from '@sparcd/auth-ui';
 import type { Card, ImageSize } from '../data/card';
 import { thumbSlots } from './slots';
 
@@ -81,7 +82,11 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   }
   return (
     <div className="relative aspect-[4/3] bg-paperHover border border-rule overflow-hidden">
-      {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-ink fn-breathe" />}
+      {loaded !== url && (
+        <svg aria-hidden viewBox="25 28 58 59" className="absolute inset-0 m-auto w-[44%] h-[44%] max-w-8 max-h-8 fill-ink fn-breathe">
+          <PawPads />
+        </svg>
+      )}
       {url && turn === url && (
         <img
           src={url}

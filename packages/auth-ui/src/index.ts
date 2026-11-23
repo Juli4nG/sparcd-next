@@ -53,5 +53,5 @@ export { fetchWhoAmI, WhoAmIError, type WhoAmIResult } from './whoami';
 export { Shell, Message, START_URL, UPLOAD_URL, TAG_URL } from './app/Shell';
 export { GateSignIn } from './app/GateSignIn';
 export { Dialog, DialogHeader, dialogOpen } from './app/Dialog';
-export { PawPads, PawStamp, PawTrail } from './app/Paw';
+export { PawPads, PawTrail } from './app/Paw';
 export { bigPrimary, bigSecondary, focusRing, press, quietLink } from './app/look';
