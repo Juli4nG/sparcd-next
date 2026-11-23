@@ -17,6 +17,7 @@ let page: Page;
 let folder: Folder;
 let withVideos: Folder;
 let cardHref: string;
+let videoCardHref: string;
 
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage();
@@ -146,6 +147,7 @@ test('uploads videos with the photos: a still for each, the video type, and no l
   await answerQuestions(withVideos);
   await expect(page.getByTestId('saved')).toHaveText('All 2 photos and 2 videos are uploaded', { timeout: 30_000 });
   await expect(page.getByText(/left out|too big/)).toHaveCount(0);
+  videoCardHref = (await page.getByRole('link', { name: 'Tag them now' }).getAttribute('href'))!;
 
   // Straight to storage, as the person, to see what was stored.
   const { code, password } = person();
@@ -240,6 +242,12 @@ test('All photos shows the counts, filters, and opens a photo big', async () => 
   await filter(`Left to tag (${PHOTOS - 2})`).click();
   await expect(grid.getByRole('button').first()).toHaveAccessibleName('Photo 3');
 
+  // One way out of the grid, and it isn't a second Back.
+  await expect(page.getByRole('button', { name: /back/i })).toHaveCount(0);
+  await page.getByRole('button', { name: 'One photo' }).click();
+  await expect(grid).toHaveCount(0);
+  await photoShown(3);
+  await page.getByRole('button', { name: 'All photos' }).click();
   await page.keyboard.press('Escape');
   await expect(grid).toHaveCount(0);
   await photoShown(3);
@@ -283,6 +291,84 @@ test('zooms with a double-click onto the original, brightens, and tags while zoo
   await page.getByRole('button', { name: 'All photos' }).click();
   await page.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Tagged (3)' }).click();
   await expect(page.getByRole('list', { name: 'All photos' }).getByRole('button', { name: 'Photo 5, Bobcat' })).toBeVisible();
+});
+
+test('plays a video over its still, without zoom, and tags it like a photo', async () => {
+  const stream = page.waitForResponse((r) => r.url().includes(`/${VIDEOS[0]}?`));
+  await page.goto(videoCardHref);
+  // The VP9 video is the oldest, so the upload opens on it.
+  await expect(page.getByText('Video 1 of 4')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Photo' })).toHaveAttribute('data-shown', 'true');
+  // A ranged read, so seeking a long video doesn't download all of it.
+  expect((await stream).status()).toBe(206);
+  const video = page.locator('video');
+  await expect(video).toHaveAttribute('poster', /\/view\.jpg\?/);
+  await video.evaluate((v: HTMLVideoElement) => {
+    v.muted = true;
+    return v.play();
+  });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState >= v.HAVE_CURRENT_DATA && !v.error)).toBe(true);
+  await expect(page.getByTestId('strip').getByRole('button', { name: 'Video 1' }).getByTestId('play-badge')).toBeVisible();
+
+  // No zoom, but Brighten works.
+  const layer = page.getByTestId('photo-layer');
+  const box = (await page.getByTestId('zoom').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+  await page.mouse.wheel(0, -400);
+  const brighten = page.getByRole('button', { name: /^Brighten the video/ });
+  await brighten.click();
+  await expect(layer).toHaveAttribute('style', /scale\(1\).*#brighten-1/);
+  await expect(page.getByRole('button', { name: 'Zoom out' })).toHaveCount(0);
+  await brighten.click();
+  await brighten.click();
+  await expect(brighten).toHaveAttribute('aria-pressed', 'false');
+
+  await page.getByRole('button', { name: 'Something else…' }).click();
+  await page.getByLabel('Search species').fill('Bobcat');
+  await page.getByRole('list', { name: 'Species' }).getByRole('button', { name: 'Bobcat' }).click();
+  await expect(page.getByTestId('receipt')).toContainText('Bobcat on video 1');
+  await saved();
+  await page.reload();
+  await expect(page.getByTestId('progress')).toContainText('1 of 4 photos tagged');
+  await page.getByTestId('strip').getByRole('button', { name: 'Video 1, tagged' }).click();
+  await expect(page.getByRole('button', { name: 'Take Bobcat off this video' })).toBeVisible();
+});
+
+test("a video the browser can't play shows its still, and tags", async () => {
+  await page.getByTestId('strip').getByRole('button', { name: /^Video [2-4]$/ }).click();
+  await expect(page.getByText("This video can't play in this browser.")).toBeVisible();
+  await expect(page.locator('video')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Photo' })).toHaveAttribute('data-shown', 'true');
+  await page.getByRole('button', { name: 'Nothing in this video' }).click();
+  await expect(page.getByTestId('receipt')).toContainText(/Nothing in this video on video [2-4]/);
+  await saved();
+  await expect(page.getByTestId('progress')).toContainText('2 of 4 photos tagged');
+
+  await page.getByRole('button', { name: 'All photos' }).click();
+  const grid = page.getByRole('list', { name: 'All photos' });
+  await expect(grid.getByRole('button', { name: 'Video 1, Bobcat' }).getByTestId('play-badge')).toBeVisible();
+  await expect(grid.getByTestId('play-badge')).toHaveCount(2);
+  await page.getByRole('button', { name: 'One photo' }).click();
+  await expect(grid).toHaveCount(0);
+});
+
+test('at phone width the header keeps the name and all of Logout', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const app of ['/upload/', '/tag/']) {
+    await page.goto(app);
+    const header = page.locator('header');
+    const name = header.getByText('E2E Tester');
+    await expect(name).toBeVisible();
+    expect(await name.evaluate((e) => e.scrollWidth <= e.clientWidth), `${app} shows the whole name`).toBe(true);
+    await expect(header.getByText('localhost')).toBeHidden();
+    const bar = (await header.boundingBox())!;
+    for (const button of [header.getByRole('button', { name: 'Logout' }), header.getByRole('button', { name: /^Switch to/ })]) {
+      const b = (await button.boundingBox())!;
+      expect(b.x + b.width, app).toBeLessThanOrEqual(390);
+      expect(b.y + b.height, app).toBeLessThanOrEqual(bar.y + bar.height);
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
 });
 
 test('old /simple/ and /classic/ paths go to the new apps', async () => {
