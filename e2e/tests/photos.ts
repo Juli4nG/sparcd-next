@@ -41,9 +41,10 @@ function withExif(jpeg: Buffer, dateTimeOriginal: string): Buffer {
 export type Folder = { dir: string; name: string; count: number; date: Date };
 
 /**
- * Two small trail-camera-like videos, made with ffmpeg: VID_0001.MP4 is VP9,
- * which Playwright's Chromium decodes, with a zero location tag and a
- * creation time; VID_0002.MP4 is H.264, which it can't, with no time.
+ * Two small videos made with ffmpeg. VID_0001.MP4 is VP9, which Chromium
+ * decodes, with a zero location tag and a creation time. VID_0002.MP4 is
+ * MPEG-4 Part 2, which no browser decodes, with no time. (Playwright's
+ * Chromium on Windows decodes H.264, so H.264 wouldn't reach the placeholder.)
  */
 export const VIDEOS = ['VID_0001.MP4', 'VID_0002.MP4'];
 export const VIDEO_LOCATION = '+00.0000+000.0000/';

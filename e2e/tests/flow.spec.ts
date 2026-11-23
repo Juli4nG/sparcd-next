@@ -40,6 +40,8 @@ const signIn = async () => {
 };
 
 async function chooseFolder(chosen = folder, found = `${PHOTOS} photos found`) {
+  // Through the start page, so a flow left on its done screen at #send starts fresh.
+  await page.goto('/upload/');
   await page.goto('/upload/#send');
   await page.locator('input[aria-label="Folder of photos"]').setInputFiles(chosen.dir);
   await expect(page.getByTestId('found')).toHaveText(found);
@@ -167,7 +169,7 @@ test('uploads videos with the photos: a still for each, the video type, and no l
     views[name] = jpegSize(await get(`Media/${id}/view.jpg`));
   }
   expect(readFileSync(join(withVideos.dir, VIDEOS[0])).includes(VIDEO_LOCATION)).toBe(true);
-  // The VP9 video's still is its own 320 × 240 frame; the H.264 one gets the 1600 × 900 placeholder.
+  // The VP9 video's still is its own 320 × 240 frame; the undecodable one gets the 1600 × 900 placeholder.
   expect(views).toEqual({ [VIDEOS[0]]: [320, 240], [VIDEOS[1]]: [1600, 900] });
 });
 
