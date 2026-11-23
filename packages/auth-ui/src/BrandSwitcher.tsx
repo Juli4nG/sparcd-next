@@ -102,7 +102,11 @@ export function BrandSwitcher({ toolName, tools: given }: BrandSwitcherProps) {
       >
         <img src={logo} alt="" className="h-7 w-auto" />
         <span className="font-display text-[20px] font-[600] leading-none whitespace-nowrap">
-          SPARC'd <span className="text-inkMute">·</span> {toolName}
+          {/* At phone width the person's name needs the room more than the family name. */}
+          <span className="max-sm:hidden">
+            SPARC'd <span className="text-inkMute">·</span>{' '}
+          </span>
+          {toolName}
         </span>
         <span aria-hidden className="text-inkMute text-[12px] leading-none">
           ▾

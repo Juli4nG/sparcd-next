@@ -59,25 +59,26 @@ export function ConnectionChip({ identity, onDisconnect, disconnectDisabled, dis
   const host = hostOf(cfg.endpoint);
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[12px] text-inkSoft">
+    // At phone width only the name and Logout fit beside the app name, so the host and key drop out.
+    <div className="flex min-w-0 items-center gap-x-2.5 font-mono text-[12px] text-inkSoft">
       {!online && (
         <span className="inline-flex items-center gap-1 text-warn" title="No network connection">
           <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-warn" />
           offline
         </span>
       )}
-      <span className="min-w-0 max-w-[12rem] truncate text-inkSoft italic" title={host}>
+      <span className="max-sm:hidden min-w-0 max-w-[12rem] truncate text-inkSoft italic" title={host}>
         {host}
       </span>
-      <span aria-hidden className="text-ruleSoft">
+      <span aria-hidden className="max-sm:hidden text-ruleSoft">
         ·
       </span>
-      <span className="shrink-0 text-inkMute italic" title="Your access key (masked)">
+      <span className="max-sm:hidden shrink-0 text-inkMute italic" title="Your access key (masked)">
         {maskKey(cfg.accessKey)}
       </span>
       {identity && (
         <>
-          <span aria-hidden className="text-ruleSoft">
+          <span aria-hidden className="max-sm:hidden text-ruleSoft">
             ·
           </span>
           <span

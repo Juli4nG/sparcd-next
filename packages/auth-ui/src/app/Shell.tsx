@@ -82,9 +82,9 @@ export function Shell({
 
   return (
     <div className="h-[100dvh] flex flex-col bg-paper">
-      <header className="h-16 shrink-0 bg-panel border-b border-rule flex items-center gap-4 px-5">
+      <header className="h-16 shrink-0 bg-panel border-b border-rule flex items-center gap-3 px-4 sm:gap-4 sm:px-5">
         <BrandSwitcher toolName={toolName} tools={TOOLS} />
-        <div className="ml-auto flex min-w-0 items-center gap-3">
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
           <ConnectionChip
             identity={session.name}
             onDisconnect={signOutNow}
@@ -93,7 +93,7 @@ export function Shell({
           />
           <button
             onClick={toggleTheme}
-            className={`w-12 h-12 grid place-items-center border border-rule text-[20px] text-inkSoft hover:text-ink ${focusRing}`}
+            className={`shrink-0 w-11 h-11 sm:w-12 sm:h-12 grid place-items-center border border-rule text-[20px] text-inkSoft hover:text-ink ${focusRing}`}
             aria-label={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
             title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
           >
