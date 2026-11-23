@@ -134,6 +134,8 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
     const digit = /^[0-9]$/.test(e.key) && !e.repeat ? Number(e.key) : -1;
     if (digit > 0 && digit <= favorites.length) pickSpecies(favorites[digit - 1]);
     else if (digit === 0) apply(NOTHING);
+    // On a video the arrows seek.
+    else if (e.key.startsWith('Arrow') && e.target instanceof Element && e.target.closest('video')) return;
     else if (e.key === 'ArrowRight') go(focus + 1);
     else if (e.key === 'ArrowLeft') go(focus - 1);
     else if (e.key === '/') setPicker(true);

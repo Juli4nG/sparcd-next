@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Card, ImageSize } from '../data/card';
+import { thumbSlots } from './slots';
 
 type ImageState = { url?: string; failed: boolean; retry: () => void };
 
 /**
  * A photo's signed image URL; undefined until it's signed. `failed` when
- * signing or loading failed. A load error signs a fresh URL once by itself,
+ * signing or loading failed. A load error signs a fresh URL by itself, twice,
  * since a long session can outlive a signature; after that `retry` does.
  */
 export function useImageUrl(card: Card, mediaID: string, size: ImageSize): ImageState & { onError: () => void } {
@@ -24,8 +25,8 @@ export function useImageUrl(card: Card, mediaID: string, size: ImageSize): Image
     };
   }, [card, mediaID, size, key, n]);
   const retry = () => setAttempt({ key, n: n + 1 });
-  // The first retry waits a moment, so a burst the server turned away (HTTP 429) isn't repeated at once.
-  const onError = () => (n === 0 ? setTimeout(retry, 1500) : setState({ key, url: state.url, failed: true }));
+  // Each retry waits longer, for a random part of it, so images the server turned away together (HTTP 429) come back spread out.
+  const onError = () => (n < 2 ? setTimeout(retry, 1000 * 2 ** n * (1 + Math.random())) : setState({ key, url: state.url, failed: true }));
   return { ...(state.key === key ? state : { failed: false }), retry, onError };
 }
 
@@ -57,6 +58,13 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
     const t = setTimeout(() => setSettled(true), 150);
     return () => clearTimeout(t);
   }, []);
+  const [turn, setTurn] = useState<string>();
+  const done = useRef(() => {});
+  useEffect(() => {
+    if (!url || !settled) return;
+    done.current = thumbSlots(() => setTurn(url));
+    return done.current;
+  }, [url, settled]);
   if (failed) {
     return (
       <div className="aspect-[4/3] bg-paperHover border border-rule flex flex-col items-center justify-center gap-1 text-[13px] text-warn">
@@ -68,14 +76,19 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   return (
     <div className="relative aspect-[4/3] bg-paperHover border border-rule overflow-hidden">
       {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-ink fn-breathe" />}
-      {url && settled && (
+      {url && turn === url && (
         <img
           src={url}
           alt={alt}
-          loading="lazy"
           decoding="async"
-          onLoad={() => setLoaded(url)}
-          onError={onError}
+          onLoad={() => {
+            done.current();
+            setLoaded(url);
+          }}
+          onError={() => {
+            done.current();
+            onError();
+          }}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-150 ${loaded === url ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
