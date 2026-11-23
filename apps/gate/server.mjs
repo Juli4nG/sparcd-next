@@ -68,7 +68,7 @@ export function withDefaults(input) {
     settingsBucket: 'sparcd-next-settings',
     allow: 'sparcd-next-*',
     port: 8787,
-    maxBodyBytes: 67108864,
+    maxBodyBytes: 268435456,
     maxBufferedBytes: 536870912,
     bodyIdleMs: 10000,
     pollMs: 5000,
@@ -116,9 +116,10 @@ export async function createGate(input) {
 
   // The ceiling on request bodies held in memory at once, charged as bytes
   // arrive rather than against a declared Content-Length, which costs the
-  // sender nothing. Each person gets at most a quarter.
+  // sender nothing. Each person gets at most a quarter, or one whole body
+  // when that is bigger, so a single video at the body limit still fits.
   const budget = makeBudget(config.maxBufferedBytes);
-  const perKeyCap = Math.max(1, Math.floor(config.maxBufferedBytes / 4));
+  const perKeyCap = Math.max(config.maxBodyBytes, Math.floor(config.maxBufferedBytes / 4));
   let settingsListings = 0;
 
   const server = createServer((req, res) => {

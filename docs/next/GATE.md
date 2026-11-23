@@ -187,6 +187,8 @@ CLI (`node apps/gate/cli.mjs …`, run where the gate's env file is):
 | `BUCKET_ALLOW` | `sparcd-next-*` |
 | `ALLOWED_HOSTS` | `server.example.org` (the Host clients sign) |
 | `PORT` | `8787` |
+| `MAX_BODY_BYTES` | `268435456` (256 MiB, the default): one request body; bigger is a 413 |
+| `MAX_BUFFERED_BYTES` | `536870912` (512 MiB, the default): all bodies held in memory at once. A person may hold a quarter of it, or one whole body if that is more; past that a PUT gets 503 `SlowDown` |
 
 Node uses its bundled CA list. If the upstream's certificate chain fails, run
 the gate with `NODE_OPTIONS=--use-system-ca`.

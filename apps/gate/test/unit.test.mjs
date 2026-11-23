@@ -88,7 +88,7 @@ test('gate HTTP requests and responses', async (t) => {
   const port = await gate.listen(0);
   const bucket = '/sparcd-next-ana';
   const media = `${bucket}/Media/test.html`;
-  const call = async (path, { method = 'GET', presigned = false, body, headers = {}, sign = true } = {}) => {
+  const call = async (path, { method = 'GET', presigned = false, body, headers = {}, sign = true, to = port } = {}) => {
     const target = new URL(path, 'http://gate.test');
     if (presigned) target.searchParams.set('X-Amz-Expires', '7200');
     if (sign) {
@@ -99,7 +99,7 @@ test('gate HTTP requests and responses', async (t) => {
     }
     return new Promise((resolve, reject) => {
       const req = request({
-        hostname: '127.0.0.1', port, method, path: target.pathname + target.search,
+        hostname: '127.0.0.1', port: to, method, path: target.pathname + target.search,
         headers: { host: 'gate.test', ...headers },
       }, (res) => {
         res.setEncoding('utf8');
@@ -134,6 +134,23 @@ test('gate HTTP requests and responses', async (t) => {
     assert.match(duplicate.text, /duplicate query parameter/);
     assert.equal((await call(media, { headers: { 'content-length': '1' }, body: 'x', sign: false })).status, 400);
     assert.equal((await call(media, { method: 'HEAD', headers: { 'transfer-encoding': 'chunked' }, sign: false })).status, 400);
+  });
+
+  await t.test('a person may hold one whole body in flight even when that is more than a quarter of the buffer', async () => {
+    const small = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, maxBodyBytes: 100, maxBufferedBytes: 200,
+    });
+    try {
+      const to = await small.listen(0);
+      // 80 bytes is past a quarter (50): the budget lets it through, and only the unsigned body hash is refused.
+      const within = await call(media, { method: 'PUT', body: 'x'.repeat(80), to });
+      assert.equal(within.status, 403);
+      assert.match(within.text, /does not match|SignatureDoesNotMatch|XAmzContentSHA256Mismatch/);
+      assert.equal((await call(media, { method: 'PUT', body: 'x'.repeat(120), to })).status, 413);
+    } finally {
+      await small.close();
+    }
   });
 
   await t.test('object responses are sandboxed and only presigned Media GETs are cached', async () => {

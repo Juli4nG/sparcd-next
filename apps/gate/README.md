@@ -35,8 +35,8 @@ Environment variables, kept in a 0600 file:
 | `SETTINGS_BUCKET` | `sparcd-next-settings` | |
 | `BUCKET_ALLOW` | `sparcd-next-*` | nothing outside it is ever touched |
 | `PORT` | `8787` | always bound to 127.0.0.1 |
-| `MAX_BODY_BYTES` | 64 MiB | one request body |
-| `MAX_BUFFERED_BYTES` | 512 MiB | all bodies in flight; a quarter per person |
+| `MAX_BODY_BYTES` | 256 MiB | one request body |
+| `MAX_BUFFERED_BYTES` | 512 MiB | all bodies in flight; per person a quarter, or one whole body if that is more |
 
 If the upstream's certificate chain fails, run with
 `NODE_OPTIONS=--use-system-ca`.
