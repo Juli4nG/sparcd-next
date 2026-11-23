@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -39,6 +39,18 @@ function withExif(jpeg: Buffer, dateTimeOriginal: string): Buffer {
 }
 
 export type Folder = { dir: string; name: string; count: number; date: Date };
+
+/**
+ * Two small trail-camera-like videos, made with ffmpeg: VID_0001.MP4 is VP9,
+ * which Playwright's Chromium decodes, with a zero location tag and a
+ * creation time; VID_0002.MP4 is H.264, which it can't, with no time.
+ */
+export const VIDEOS = ['VID_0001.MP4', 'VID_0002.MP4'];
+export const VIDEO_LOCATION = '+00.0000+000.0000/';
+
+export function addVideos(folder: Folder): void {
+  for (const name of VIDEOS) copyFileSync(join(import.meta.dirname, '..', 'fixtures', name), join(folder.dir, name));
+}
 
 /**
  * A card folder named the way field volunteers name them, "<site>_MM.DD.YY_<count>.images",

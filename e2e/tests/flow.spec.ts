@@ -1,7 +1,9 @@
-import { rmSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { makeFolder, type Folder } from './photos';
+import { AwsClient } from 'aws4fetch';
+import { VIDEOS, VIDEO_LOCATION, addVideos, makeFolder, type Folder } from './photos';
 import { person } from './person';
 
 // One person, one tab, start to finish: each step builds on the one before.
@@ -13,6 +15,7 @@ const PHOTOS = 24;
 
 let page: Page;
 let folder: Folder;
+let withVideos: Folder;
 let cardHref: string;
 
 test.beforeAll(async ({ browser }) => {
@@ -20,11 +23,13 @@ test.beforeAll(async ({ browser }) => {
   // Species pictures come from an outside host; the letter stands in for them.
   await page.context().route(/^https:\/\/arizona\.box\.com\//, (route) => route.abort());
   folder = await makeFolder(page, SITE.id, PHOTOS, 10);
+  withVideos = await makeFolder(page, SITE.id, 2, 20);
+  addVideos(withVideos);
 });
 
 test.afterAll(async () => {
   await page?.close();
-  if (folder) rmSync(dirname(folder.dir), { recursive: true, force: true });
+  for (const f of [folder, withVideos]) if (f) rmSync(dirname(f.dir), { recursive: true, force: true });
 });
 
 const signIn = async () => {
@@ -34,17 +39,17 @@ const signIn = async () => {
   await page.getByRole('button', { name: 'Connect' }).click();
 };
 
-async function chooseFolder() {
+async function chooseFolder(chosen = folder, found = `${PHOTOS} photos found`) {
   await page.goto('/upload/#send');
-  await page.locator('input[aria-label="Folder of photos"]').setInputFiles(folder.dir);
-  await expect(page.getByTestId('found')).toHaveText(`${PHOTOS} photos found`);
+  await page.locator('input[aria-label="Folder of photos"]').setInputFiles(chosen.dir);
+  await expect(page.getByTestId('found')).toHaveText(found);
   await page.getByRole('button', { name: 'Next' }).click();
 }
 
 /** Site and date as the folder name gives them, then Finish. */
-async function answerQuestions() {
+async function answerQuestions(chosen = folder) {
   await expect(page.getByRole('heading', { name: 'Where was the camera?' })).toBeVisible();
-  await expect(page.getByTestId('folder')).toContainText(folder.name);
+  await expect(page.getByTestId('folder')).toContainText(chosen.name);
   const site = page.getByRole('list', { name: 'Sites' }).getByRole('button').first();
   await expect(site).toContainText(SITE.name);
   await expect(site).toHaveClass(/bg-mark/);
@@ -52,7 +57,7 @@ async function answerQuestions() {
 
   await expect(page.getByRole('heading', { name: 'When were these photos collected?' })).toBeVisible();
   const fromName = page.getByRole('button', { name: /^From the folder name/ });
-  const day = folder.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+  const day = chosen.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
   await expect(fromName).toContainText(day);
   await expect(fromName).toHaveClass(/bg-mark/);
   await fromName.click();
@@ -134,6 +139,38 @@ test('uploading the same folder again says the photos were already uploaded', as
   await expect(page.getByText(`${PHOTOS} photos were already uploaded before.`)).toBeVisible();
 });
 
+test('uploads videos with the photos: a still for each, the video type, and no location in the stored video', async () => {
+  await chooseFolder(withVideos, '2 photos and 2 videos found');
+  await answerQuestions(withVideos);
+  await expect(page.getByTestId('saved')).toHaveText('All 2 photos and 2 videos are uploaded', { timeout: 30_000 });
+  await expect(page.getByText(/left out|too big/)).toHaveCount(0);
+
+  // Straight to storage, as the person, to see what was stored.
+  const { code, password } = person();
+  const aws = new AwsClient({ accessKeyId: code, secretAccessKey: password, service: 's3', region: 'us-east-1' });
+  const bucket = `http://localhost:8080/sparcd-next-${code}`;
+  const get = async (key: string) => {
+    const res = await aws.fetch(`${bucket}/${key}`, { headers: { 'x-amz-content-sha256': EMPTY_SHA } });
+    expect(res.status, key).toBe(200);
+    return Buffer.from(await res.arrayBuffer());
+  };
+  const media = (await get('media.csv')).toString('utf8');
+  const views: Record<string, [number, number]> = {};
+  for (const name of VIDEOS) {
+    const card = readFileSync(join(withVideos.dir, name));
+    const id = createHash('sha256').update(card).digest('hex');
+    expect(media).toMatch(new RegExp(`^${id},.*,${name},video/mp4,`, 'm'));
+    const original = await get(`Media/${id}/${name}`);
+    expect(original.length).toBe(card.length);
+    expect(original.includes(VIDEO_LOCATION)).toBe(false);
+    await get(`Media/${id}/thumb.jpg`);
+    views[name] = jpegSize(await get(`Media/${id}/view.jpg`));
+  }
+  expect(readFileSync(join(withVideos.dir, VIDEOS[0])).includes(VIDEO_LOCATION)).toBe(true);
+  // The VP9 video's still is its own 320 × 240 frame; the H.264 one gets the 1600 × 900 placeholder.
+  expect(views).toEqual({ [VIDEOS[0]]: [320, 240], [VIDEOS[1]]: [1600, 900] });
+});
+
 test('the Tagger opens with no second sign-in', async () => {
   await page.goto('/tag/');
   await expect(page.getByRole('heading', { name: 'Photos to tag' })).toBeVisible();
@@ -205,3 +242,15 @@ test('signs out, in every open tab', async () => {
   await page.goto('/tag/');
   await expect(page.getByRole('textbox', { name: 'Login name' })).toBeVisible();
 });
+
+const EMPTY_SHA = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** Width and height from a JPEG's frame header. */
+function jpegSize(jpeg: Buffer): [number, number] {
+  for (let i = 2; i < jpeg.length; ) {
+    const marker = jpeg[i + 1];
+    if (marker >= 0xc0 && marker <= 0xc2) return [jpeg.readUInt16BE(i + 7), jpeg.readUInt16BE(i + 5)];
+    i += 2 + jpeg.readUInt16BE(i + 2);
+  }
+  throw new Error('no frame header');
+}
