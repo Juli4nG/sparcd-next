@@ -44,8 +44,12 @@ export function createPool(size = poolSize()): Pool {
     idle.push(worker);
   }
 
+  let closed = false;
+  const stopped = () => new DOMException('Stopped', 'AbortError');
   const run = <T,>(req: WorkerRequest) =>
     new Promise<T>((resolve, reject) => {
+      // Its workers are gone, so a job queued now would never settle.
+      if (closed) return reject(stopped());
       queue.push({ req, resolve: resolve as (v: never) => void, reject });
       pump();
     });
@@ -54,9 +58,11 @@ export function createPool(size = poolSize()): Pool {
     read: (file) => run<ReadResult>({ kind: 'read', file }),
     derive: (file, frame) => run<Derived>({ kind: 'derive', file, frame }),
     close: () => {
-      const stopped = new DOMException('Stopped', 'AbortError');
-      for (const job of [...queue.splice(0), ...busy.values()]) job.reject(stopped);
-      for (const w of [...idle, ...busy.keys()]) w.terminate();
+      if (closed) return;
+      closed = true;
+      for (const job of [...queue.splice(0), ...busy.values()]) job.reject(stopped());
+      for (const w of [...idle.splice(0), ...busy.keys()]) w.terminate();
+      busy.clear();
     },
   };
 }

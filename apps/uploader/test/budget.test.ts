@@ -59,3 +59,21 @@ describe('byteBudget', () => {
     expect(await run(100, async () => 'ok')).toBe('ok');
   });
 });
+
+describe('byteBudget with a signal', () => {
+  it('rejects waiting jobs and later ones once the signal aborts', async () => {
+    const stop = new AbortController();
+    const run = byteBudget(100, stop.signal);
+    let release!: () => void;
+    const first = run(100, () => new Promise<void>((r) => (release = r)));
+    const started: string[] = [];
+    const waiting = run(50, async () => void started.push('waiting'));
+    await tick();
+    stop.abort();
+    await expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(run(1, async () => void started.push('later'))).rejects.toMatchObject({ name: 'AbortError' });
+    release();
+    await first;
+    expect(started).toEqual([]);
+  });
+});

@@ -75,7 +75,7 @@ type Job = {
 async function readAll(job: Job, pool: Pool, files: CardFile[], unread: CardFile[]): Promise<void> {
   const total = job.card.length;
   const startedAt = performance.now();
-  const inFlight = byteBudget(IN_FLIGHT_BYTES);
+  const inFlight = byteBudget(IN_FLIGHT_BYTES, job.signal);
   let done = total - files.filter((c) => !job.reads.has(c.file)).length;
   job.onProgress({ phase: 'reading', done, total, startedAt });
   await Promise.all(
@@ -139,7 +139,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
     };
 
     const pending: Photo[] = [...plan.rowOnly];
-    const inFlight = byteBudget(IN_FLIGHT_BYTES);
+    const inFlight = byteBudget(IN_FLIGHT_BYTES, job.signal);
     const sendOne = async ({ photo, missing }: (typeof plan.send)[number]) => {
       try {
         await inFlight(photo.file.size, () => putPhoto(shards, photo, missing, pool));
