@@ -62,7 +62,13 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   const done = useRef(() => {});
   useEffect(() => {
     if (!url || !settled) return;
-    done.current = thumbSlots(() => setTurn(url));
+    done.current = thumbSlots(
+      () => setTurn(url),
+      () => {
+        setTurn(undefined);
+        onError();
+      },
+    );
     return done.current;
   }, [url, settled]);
   if (failed) {
