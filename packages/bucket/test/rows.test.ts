@@ -123,4 +123,12 @@ describe('shareTables', () => {
     expect(out.media.map((m) => [m.deploymentID, m.filePath])).toEqual([['k3-2', `Media/${M1}/view.jpg`]]);
     expect(out.observations).toEqual([]);
   });
+
+  it('shares a video as its still, described as a JPEG', () => {
+    const share = { id: 'k3', createdAt: '', expiresAt: '', deploymentIDs: ['juniper-draw_2026-11-17'], positionDecimals: 1, image: 'thumb' as const };
+    const d = deployment('2026-11-02T06:00:00-07:00', '2026-11-10T06:00:00-07:00', { latitude: '0', longitude: '0' });
+    const clip = media(M1, { filePath: `Media/${M1}/CLIP.MP4`, fileMediatype: 'video/mp4' });
+    const out = shareTables({ deployments: [d], media: [clip], observations: [] }, share);
+    expect(out.media.map((m) => [m.filePath, m.fileMediatype])).toEqual([[`Media/${M1}/thumb.jpg`, 'image/jpeg']]);
+  });
 });
