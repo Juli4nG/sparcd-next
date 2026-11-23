@@ -5,10 +5,13 @@
 // which never leaves this process. Caddy fronts it on the same origin as the
 // apps and passes Host through unchanged, because Host is what the caller signed.
 
+import { createHash } from 'node:crypto';
 import { createServer, STATUS_CODES } from 'node:http';
 import { Readable, pipeline } from 'node:stream';
 
-import { verifySignature, peekAccessKeyId, escapeXml, DROP_FROM_CLIENT } from './sigv4.mjs';
+import {
+  verifySignature, peekAccessKeyId, escapeXml, DROP_FROM_CLIENT, EMPTY_SHA256,
+} from './sigv4.mjs';
 import {
   makeGuard, bucketFromPath, keyFromPath, namesOtherBucket,
   safeKeySegments, safeRequestTarget,
@@ -183,29 +186,38 @@ export async function createGate(input) {
     if (!claimedPerson) return refuse(403, 'InvalidAccessKeyId', 'unknown login');
     if (claimedPerson.status !== 'active') return refuse(403, 'AccessDenied', `login is ${claimedPerson.status}`);
 
-    let body;
-    if (!bodyless) {
-      if (Number(req.headers['content-length'] ?? 0) > config.maxBodyBytes) {
-        return refuse(413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
-      }
-      const account = budget.open(claimed, perKeyCap);
-      res.on('close', () => account.release());
-      const read = await readBody(req, config.maxBodyBytes, account, config.bodyIdleMs);
-      if (read.error === 'too-large') return refuseBody(req, res, 413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
-      if (read.error === 'busy') return refuseBody(req, res, 503, 'SlowDown', 'too much request body in flight');
-      if (read.error === 'idle') return refuseBody(req, res, 408, 'RequestTimeout', 'the request body stalled');
-      if (read.error) return undefined;
-      body = read.body;
+    if (!bodyless && Number(req.headers['content-length'] ?? 0) > config.maxBodyBytes) {
+      return refuse(413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
     }
-
+    // The signature is checked before the body is read, so a login name alone
+    // never gets memory held for it.
     const verified = await verifySignature({
-      method: req.method, url, headers, body,
+      method: req.method, url, headers,
       lookupSecret: (id) => people.secret(id),
       allowPresigned: !isApi,
     });
     if (verified.error) return refuse(403, 'SignatureDoesNotMatch', verified.error);
     const person = people.get(verified.accessKeyId);
     if (person?.status !== 'active') return refuse(403, 'AccessDenied', 'login is not active');
+
+    let body;
+    let bodyHash = EMPTY_SHA256;
+    if (!bodyless) {
+      const account = budget.open(verified.accessKeyId, perKeyCap);
+      res.on('close', () => account.release());
+      const read = await readBody(req, config.maxBodyBytes, account, config.bodyIdleMs);
+      if (read.error === 'too-large') return refuseBody(req, res, 413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
+      if (read.error === 'busy') return refuseBody(req, res, 503, 'SlowDown', 'too much request body in flight');
+      if (read.error === 'idle') return refuseBody(req, res, 408, 'RequestTimeout', 'the request body stalled');
+      if (read.error) return undefined;
+      ({ body, hash: bodyHash } = read);
+    }
+    // The signature covers the declared hash, not the bytes. Checking the
+    // declaration against the body stops a captured PUT being replayed inside
+    // the window with different contents.
+    if (!verified.presigned && bodyHash !== verified.payloadHash) {
+      return refuse(403, 'SignatureDoesNotMatch', 'body does not match x-amz-content-sha256');
+    }
 
     if (isApi) {
       return respondJson(res, 200, {
@@ -271,6 +283,7 @@ export async function createGate(input) {
       if (!(FORWARD_HEADERS.has(name) || forwardableAmz(name))) continue;
       out.set(name, name === 'if-match' ? normalizeIfMatch(value) : value);
     }
+    if (body) out.set('x-amz-content-sha256', verified.payloadHash);
     const upstreamRes = await upstream.send(target, { method: req.method, headers: out, body });
 
     if (!upstreamRes.ok && upstreamRes.status !== 304) return respondUpstreamError(res, upstreamRes);
@@ -400,9 +413,9 @@ function respondJson(res, status, value) {
   res.end(json);
 }
 
-// Buffered before verification, because verification hashes it. The same
-// buffer then goes upstream with a Content-Length, never chunked, which RGW
-// rejects.
+// Buffered whole and hashed as it arrives, because the hash must match before
+// anything goes upstream. The buffer then goes with a Content-Length, never
+// chunked, which RGW rejects.
 function readBody(req, limit, account, idleMs) {
   return new Promise((resolve) => {
     // Node's parser delivers at most Content-Length bytes, so a declared body
@@ -412,6 +425,7 @@ function readBody(req, limit, account, idleMs) {
     const declared = req.headers['content-length'];
     const whole = declared !== undefined && Number(declared) <= limit ? Buffer.allocUnsafe(Number(declared)) : null;
     const chunks = [];
+    const hash = createHash('sha256');
     let size = 0;
     let settled = false;
     let timer = null;
@@ -433,10 +447,14 @@ function readBody(req, limit, account, idleMs) {
       size += chunk.length;
       if (size > limit) { done({ error: 'too-large' }); return; }
       if (!account.charge(chunk.length)) { done({ error: 'busy' }); return; }
+      hash.update(chunk);
       if (whole) chunk.copy(whole, size - chunk.length);
       else chunks.push(chunk);
     });
-    req.on('end', () => done({ body: whole ? whole.subarray(0, size) : Buffer.concat(chunks) }));
+    req.on('end', () => done({
+      body: whole ? whole.subarray(0, size) : Buffer.concat(chunks),
+      hash: hash.digest('hex'),
+    }));
     req.on('aborted', () => done({ error: 'aborted' }));
     req.on('error', () => done({ error: 'aborted' }));
   });

@@ -83,7 +83,28 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
       aws: { ...init.aws, allHeaders: true },
     };
   };
-  const send = (u, init = {}) => passthrough.fetch(u, signAll(u, init));
+  // A body is signed by its declared x-amz-content-sha256 and goes as a stream
+  // of views into the caller's buffer: given the buffer, undici copies it once
+  // into the Request and again on the way out.
+  const send = async (u, { body, ...init } = {}) => {
+    if (!body) return passthrough.fetch(u, signAll(u, init));
+    const options = signAll(u, init);
+    const signed = await passthrough.sign(u, options);
+    const headers = new Headers(signed.headers);
+    headers.set('content-length', String(body.length));
+    let at = 0;
+    const views = new ReadableStream({
+      pull(controller) {
+        if (at >= body.length) return controller.close();
+        controller.enqueue(body.subarray(at, (at += 1 << 20)));
+        return undefined;
+      },
+    });
+    return fetch(new Request(signed.url, {
+      method: signed.method, headers, body: views, duplex: 'half',
+      signal: options.signal, redirect: 'manual',
+    }));
+  };
   const sendMeta = (u, init = {}) => aws.fetch(u, signAll(u, init));
 
   return {

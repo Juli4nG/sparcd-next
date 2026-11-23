@@ -106,6 +106,9 @@ A request that matches nothing below gets a 403 in S3 XML shape.
     real body hash. For a photo or video PUT that is the hash of the stored
     file, with its camera data removed, so it is not the `mediaID`.
   - Streaming payloads are refused.
+  - The signature is checked before any of the body is read. The body is
+    hashed as it arrives and must match `x-amz-content-sha256`, which then
+    goes upstream as the signed payload hash.
 - **Presigned query-string URLs:**
   - GET and HEAD only, verified with the person's key.
   - `X-Amz-Expires` is at most 7,200 s.

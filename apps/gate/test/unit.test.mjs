@@ -59,9 +59,11 @@ test('gate HTTP requests and responses', async (t) => {
   const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
   const VIDEO = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
   const puts = [];
+  const putHeaders = [];
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'PUT') {
+      putHeaders.push(req.headers);
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       return req.on('end', () => {
@@ -172,13 +174,57 @@ test('gate HTTP requests and responses', async (t) => {
   });
 
   await t.test('a body arrives whole, with or without a declared length', async () => {
-    const body = Buffer.from(Array.from({ length: 300_000 }, (_, i) => (i * 7) % 256));
+    const body = Buffer.from(Array.from({ length: 3_000_000 }, (_, i) => (i * 7) % 256));
     for (const chunked of [false, true]) {
       puts.length = 0;
+      putHeaders.length = 0;
       const res = await call(`${bucket}/body.bin`, { method: 'PUT', body, signBody: true, chunked });
       assert.equal(res.status, 200);
       assert.deepEqual(puts, [body]);
+      // Upstream gets a Content-Length, never chunked, and the real body hash.
+      assert.equal(putHeaders[0]['content-length'], String(body.length));
+      assert.equal(putHeaders[0]['transfer-encoding'], undefined);
+      assert.equal(putHeaders[0]['x-amz-content-sha256'], await sha256hex(body));
+      assert.match(putHeaders[0].authorization, /SignedHeaders=[^,]*x-amz-content-sha256/);
     }
+  });
+
+  await t.test('a bad or missing signature is refused before a declared body is read', async () => {
+    const raw = (head) => new Promise((resolve, reject) => {
+      const socket = connect(port, '127.0.0.1', () => socket.write(head));
+      let text = '';
+      socket.on('data', (d) => {
+        text += d;
+        if (!text.includes('</Error>')) return;
+        socket.destroy();
+        resolve(text);
+      });
+      socket.on('error', reject);
+    });
+    const req = await signed(new URL(`http://gate.test${bucket}/big.bin`), { method: 'PUT', body: 'x' });
+    const forged = [...req.headers].map(([k, v]) => `${k}: ${k === 'authorization' ? `${v.slice(0, -4)}dead` : v}`);
+    puts.length = 0;
+    for (const [lines, pattern] of [
+      [forged, /<Code>SignatureDoesNotMatch<\/Code><Message>signature mismatch</],
+      [[], /<Code>InvalidAccessKeyId<\/Code><Message>unknown login</],
+    ]) {
+      // 200 MB declared, none of it sent: the answer cannot have waited on the body.
+      const head = [`PUT ${bucket}/big.bin HTTP/1.1`, 'host: gate.test', 'content-length: 200000000',
+        ...lines, '', ''].join('\r\n');
+      const text = await raw(head);
+      assert.match(text, /^HTTP\/1.1 403 /);
+      assert.match(text, pattern);
+    }
+    assert.deepEqual(puts, []);
+  });
+
+  await t.test('a body that does not match its signed hash is refused and never forwarded', async () => {
+    puts.length = 0;
+    // Signed as an empty body.
+    const res = await call(`${bucket}/body.bin`, { method: 'PUT', body: 'hello' });
+    assert.equal(res.status, 403);
+    assert.match(res.text, /<Code>SignatureDoesNotMatch<\/Code><Message>body does not match x-amz-content-sha256</);
+    assert.deepEqual(puts, []);
   });
 
   await t.test('a body shorter than its declared length stalls into 408; bytes past it are not body', async () => {
@@ -319,13 +365,11 @@ describe('sigv4 header form', () => {
     assert.equal(result.error, 'x-amz-date outside the window');
   });
 
-  test('a body that does not match the declared hash is rejected', async () => {
+  test('the declared body hash comes back for the caller to check against the body', async () => {
     const input = await signed('https://server.example.org/b/k', { method: 'PUT', body: 'hello' });
-    assert.equal((await verifySignature(input)).error, undefined);
-    assert.equal(
-      (await verifySignature({ ...input, body: Buffer.from('hellp') })).error,
-      'body does not match x-amz-content-sha256',
-    );
+    const out = await verifySignature(input);
+    assert.equal(out.error, undefined);
+    assert.equal(out.payloadHash, await sha256hex('hello'));
   });
 
   test('UNSIGNED-PAYLOAD is refused', async () => {
