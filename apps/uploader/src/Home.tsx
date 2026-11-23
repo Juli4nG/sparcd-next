@@ -21,7 +21,7 @@ export function Home({ session }: { session: Session }) {
     <main className="h-full overflow-y-auto">
       <div className="max-w-[880px] mx-auto px-6 py-10 flex flex-col gap-10">
         <a href="#send" className={`h-32 flex items-center justify-center bg-ink text-paper border-2 border-ink hover:opacity-90 ${press} ${focusRing}`}>
-          <span className="font-display text-[34px] font-[600] leading-tight">Upload photos</span>
+          <span className="font-display text-title font-[600] leading-tight">Upload photos</span>
         </a>
         {!(uploads && !uploads.length) && <Uploads uploads={uploads} counts={counts} failed={failed} />}
       </div>
@@ -38,26 +38,26 @@ function Uploads({ uploads, counts, failed }: { uploads: Deployment[] | null; co
   };
   return (
     <details className="group border-t border-rule pt-4" data-testid="uploads">
-      <summary className={`list-none cursor-pointer min-h-12 inline-flex items-center gap-3 text-[20px] text-inkSoft hover:text-ink ${focusRing}`}>
+      <summary className={`list-none cursor-pointer min-h-12 inline-flex items-center gap-3 text-body text-inkSoft hover:text-ink ${focusRing}`}>
         <span aria-hidden className="inline-block transition-transform group-open:rotate-90">
           ›
         </span>
         Your uploads{uploads && ` (${uploads.length.toLocaleString()})`}
         {failed ? (
-          <span role="alert" className="text-[18px] text-warn">
+          <span role="alert" className="text-detail text-warn">
             We couldn't load them. Check your internet connection, then reload the page.
           </span>
         ) : (
           !uploads && (
-            <span role="status" className="text-[18px] text-inkMute">
+            <span role="status" className="text-detail text-inkMute">
               Loading…
             </span>
           )
         )}
       </summary>
       {uploads && (
-        <table className="mt-3 w-full text-left text-[17px]">
-          <thead className="text-inkMute text-[15px]">
+        <table className="mt-3 w-full text-left text-detail">
+          <thead className="text-inkMute text-small">
             <tr className="border-b border-ruleSoft">
               <th className="py-2 pr-4 font-[500]">Upload</th>
               <th className="py-2 pr-4 font-[500] text-right">{videos ? 'Photos and videos' : 'Photos'}</th>

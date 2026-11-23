@@ -41,7 +41,7 @@ function TryAgain({ onClick }: { onClick: () => void }) {
         onClick();
       }}
       onDoubleClick={(e) => e.stopPropagation()}
-      className="min-h-9 px-2 inline-flex items-center border border-rule bg-paper text-[14px] text-ink underline"
+      className="min-h-9 px-2 inline-flex items-center border border-rule bg-paper text-small text-ink underline"
     >
       Try again
     </span>
@@ -73,7 +73,7 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   }, [url, settled]);
   if (failed) {
     return (
-      <div className="aspect-[4/3] bg-paperHover border border-rule flex flex-col items-center justify-center gap-1 text-[13px] text-warn">
+      <div className="aspect-[4/3] bg-paperHover border border-rule flex flex-col items-center justify-center gap-1 text-small text-warn">
         Photo didn't load
         <TryAgain onClick={retry} />
       </div>
@@ -107,7 +107,7 @@ export function PlayBadge({ className = '' }: { className?: string }) {
   return (
     <span aria-hidden data-testid="play-badge" className={`pointer-events-none inline-flex ${className}`}>
       <svg viewBox="0 0 32 32" className="w-full h-full">
-        <circle cx="16" cy="16" r="14.5" fill="#172018" fillOpacity="0.75" stroke="white" strokeWidth="2" />
+        <circle cx="16" cy="16" r="14.5" className="fill-frame" fillOpacity="0.75" stroke="white" strokeWidth="2" />
         <path d="M12.5 9.5v13l10.5-6.5z" fill="white" />
       </svg>
     </span>
@@ -119,7 +119,7 @@ export function TaggedMark({ className = '' }: { className?: string }) {
   return (
     <span aria-hidden className={`pointer-events-none inline-flex text-ok ${className}`}>
       <svg viewBox="0 0 32 32" fill="none" className="w-full h-full" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m6 16 7 7L26 8" stroke="#172018" strokeWidth="9" />
+        <path d="m6 16 7 7L26 8" className="stroke-frame" strokeWidth="9" />
         <path d="m6 16 7 7L26 8" stroke="white" strokeWidth="7" />
         <path d="m6 16 7 7L26 8" stroke="currentColor" strokeWidth="4" />
       </svg>

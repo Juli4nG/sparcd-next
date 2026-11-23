@@ -93,7 +93,7 @@ export function Shell({
           />
           <button
             onClick={toggleTheme}
-            className={`shrink-0 w-11 h-11 sm:w-12 sm:h-12 grid place-items-center border border-rule text-[20px] text-inkSoft hover:text-ink ${focusRing}`}
+            className={`shrink-0 w-11 h-11 sm:w-12 sm:h-12 grid place-items-center border border-rule text-body text-inkSoft hover:text-ink ${focusRing}`}
             aria-label={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
             title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
           >
@@ -110,7 +110,7 @@ export function Message({ children, warn }: { children: ReactNode; warn?: boolea
   return (
     <div className="h-full grid place-content-center justify-items-center gap-5 p-8 bg-paper">
       {!warn && <PawStamp />}
-      <p role={warn ? 'alert' : 'status'} className={`text-[20px] max-w-[36rem] text-center ${warn ? 'text-warn' : 'text-inkSoft'}`}>
+      <p role={warn ? 'alert' : 'status'} className={`text-body max-w-[36rem] text-center ${warn ? 'text-warn' : 'text-inkSoft'}`}>
         {children}
       </p>
     </div>

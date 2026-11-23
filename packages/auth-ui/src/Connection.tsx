@@ -32,9 +32,9 @@ export type ConnectionProps = {
   gate?: boolean;
 };
 
-const fieldLabel = 'block font-[600] text-[11px] tracking-[0.16em] uppercase text-inkSoft mb-1.5';
+const fieldLabel = 'block font-[600] text-kicker tracking-[0.16em] uppercase text-inkSoft mb-1.5';
 const textInput =
-  'w-full bg-paper border border-rule px-3 py-2 text-[14px] font-mono text-ink ' +
+  'w-full bg-paper border border-rule px-3 py-2 text-small font-mono text-ink ' +
   'placeholder:text-inkMute focus-visible:outline focus-visible:outline-2 ' +
   'focus-visible:outline-accent focus-visible:outline-offset-2';
 
@@ -241,7 +241,7 @@ export function Connection({
         {gate ? (
           <div className="mb-6" />
         ) : (
-          <p className="font-body text-[14px] text-inkSoft mb-6">
+          <p className="font-body text-small text-inkSoft mb-6">
             Connect to an S3-compatible endpoint to begin.
           </p>
         )}
@@ -252,7 +252,7 @@ export function Connection({
             <div
               role="status"
               data-testid="mixed-content-warning"
-              className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-[13px] text-warn"
+              className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-small text-warn"
             >
               This page is loaded over HTTPS, so connecting to a plain HTTP endpoint will be
               blocked by the browser. Check the endpoint's scheme under Advanced.
@@ -262,7 +262,7 @@ export function Connection({
             <div
               role="alert"
               data-testid="connection-probe-failure"
-              className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-[13px] text-warn"
+              className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-small text-warn"
             >
               {probeFailureMessage(probeFailure)}
             </div>
@@ -317,7 +317,7 @@ export function Connection({
               disabled={pending}
             />
           </div>
-          <label className="flex items-center gap-2.5 font-body text-[14px] text-ink">
+          <label className="flex items-center gap-2.5 font-body text-small text-ink">
             <input
               type="checkbox"
               className="w-4 h-4 accent-accent"
@@ -328,7 +328,7 @@ export function Connection({
             />
             {gate ? 'Remember login name on this device' : <>Remember endpoint &amp; access key on this device</>}
           </label>
-          <p id={rememberHelpId} className="font-body text-[13px] text-inkMute italic">
+          <p id={rememberHelpId} className="font-body text-small text-inkMute italic">
             {gate
               ? "(Don't set remember login name if on a public computer)"
               : <>(Don't set remember endpoint &amp; access key if on a public computer)</>}
@@ -337,7 +337,7 @@ export function Connection({
 
         {!gate && <button
           type="button"
-          className="mt-5 text-[14px] font-body text-inkSoft hover:text-ink underline underline-offset-4 decoration-rule"
+          className="mt-5 text-small font-body text-inkSoft hover:text-ink underline underline-offset-4 decoration-rule"
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen((v) => !v)}
         >
@@ -346,7 +346,7 @@ export function Connection({
 
         {!gate && advancedOpen && (
           <div className="mt-4 space-y-4 border-t border-ruleSoft pt-4">
-            <p className="font-body text-[13px] text-inkMute">
+            <p className="font-body text-small text-inkMute">
               Inferred from the endpoint. Override only if your backend differs.
             </p>
             <div>
@@ -362,7 +362,7 @@ export function Connection({
                 disabled={pending}
               />
             </div>
-            <label className="flex items-center gap-2.5 font-body text-[14px] text-ink">
+            <label className="flex items-center gap-2.5 font-body text-small text-ink">
               <input
                 type="checkbox"
                 className="w-4 h-4 accent-accent"
@@ -372,7 +372,7 @@ export function Connection({
               />
               Force path-style addressing (MinIO)
             </label>
-            <label className="flex items-center gap-2.5 font-body text-[14px] text-ink">
+            <label className="flex items-center gap-2.5 font-body text-small text-ink">
               <input
                 type="checkbox"
                 className="w-4 h-4 accent-accent"
@@ -389,7 +389,7 @@ export function Connection({
           type="submit"
           disabled={!canConnect || pending}
           title={!online ? "You're offline" : undefined}
-          className="mt-7 w-full bg-ink text-paper border border-ink px-4 py-2 text-[14px] font-body font-[600] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-inkSoft focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+          className="mt-7 w-full bg-ink text-paper border border-ink px-4 py-2 text-small font-body font-[600] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-inkSoft focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         >
           {pending ? 'Connecting…' : 'Connect'}
         </button>
@@ -399,7 +399,7 @@ export function Connection({
             type="button"
             onClick={onSkip}
             disabled={pending}
-            className="mt-3 w-full text-[13px] font-body text-inkSoft hover:text-ink underline underline-offset-4 decoration-rule disabled:opacity-40 disabled:cursor-not-allowed"
+            className="mt-3 w-full text-small font-body text-inkSoft hover:text-ink underline underline-offset-4 decoration-rule disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Login later
           </button>

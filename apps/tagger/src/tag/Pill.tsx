@@ -15,7 +15,7 @@ export function Pill({ label, icon, pressed, ariaLabel, className = '', onClick 
       onClick={onClick}
       aria-pressed={pressed}
       aria-label={ariaLabel}
-      className={`h-12 pl-3.5 pr-4 inline-flex items-center gap-2 rounded-full text-[18px] font-[600] shadow ${pressed ? 'bg-ink text-paper hover:opacity-90' : 'bg-paper/85 text-ink hover:bg-paper'} ${press} ${focusRing} ${className}`}
+      className={`h-12 pl-3.5 pr-4 inline-flex items-center gap-2 rounded-full text-detail font-[600] shadow ${pressed ? 'bg-ink text-paper hover:opacity-90' : 'bg-paper/85 text-ink hover:bg-paper'} ${press} ${focusRing} ${className}`}
     >
       {icon}
       {label}

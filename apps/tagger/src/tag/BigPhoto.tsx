@@ -113,8 +113,8 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   if (failed)
     return (
       <div className="absolute inset-0 grid place-content-center justify-items-center gap-5 p-8 text-center">
-        <p className="text-[20px] text-frameInk/80">This {video ? 'video' : 'photo'} didn't load. Check your internet connection.</p>
-        <button onClick={retry} className={`h-14 px-6 border-2 border-frameInk/80 text-frameInk text-[20px] font-[600] hover:bg-frameInk/10 ${focusRing}`}>
+        <p className="text-body text-frameInk/80">This {video ? 'video' : 'photo'} didn't load. Check your internet connection.</p>
+        <button onClick={retry} className={`h-14 px-6 border-2 border-frameInk/80 text-frameInk text-body font-[600] hover:bg-frameInk/10 ${focusRing}`}>
           Try again
         </button>
       </div>
@@ -169,14 +169,14 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
         </div>
       </div>
       {video && cantPlay && card.own && (
-        <p className="absolute bottom-3 inset-x-3 mx-auto w-fit max-w-full px-4 py-2 rounded-full bg-frame/85 text-center text-[18px] text-frameInk">
+        <p className="absolute bottom-3 inset-x-3 mx-auto w-fit max-w-full px-4 py-2 rounded-full bg-frame/85 text-center text-detail text-frameInk">
           This video can't play in this browser.
         </p>
       )}
       {zoomed && (
         <button
           onClick={() => setZoom(NO_ZOOM, true)}
-          className={`absolute bottom-3 left-1/2 -translate-x-1/2 h-12 px-5 rounded-full bg-paper/85 text-[18px] font-[600] text-ink shadow hover:bg-paper ${focusRing}`}
+          className={`absolute bottom-3 left-1/2 -translate-x-1/2 h-12 px-5 rounded-full bg-paper/85 text-detail font-[600] text-ink shadow hover:bg-paper ${focusRing}`}
         >
           Zoom out
         </button>

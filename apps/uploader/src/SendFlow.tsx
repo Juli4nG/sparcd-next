@@ -92,14 +92,14 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
     return (
       <Screen onBack={() => setStep('date')} question="Anything to add?" folder={folder} bar={bar}>
         <div className="flex flex-col gap-5">
-          <p className="text-[22px] text-ink">{line}</p>
-          <label className="flex flex-col gap-2 text-[20px] text-inkSoft">
+          <p className="text-lead text-ink">{line}</p>
+          <label className="flex flex-col gap-2 text-body text-inkSoft">
             Notes (you can leave this empty)
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className={`w-full px-4 py-3 border-2 border-ink bg-panel text-[22px] text-ink ${focusRing}`}
+              className={`w-full px-4 py-3 border-2 border-ink bg-panel text-lead text-ink ${focusRing}`}
             />
           </label>
           <div>
@@ -108,7 +108,7 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
                 details.resolve({ site: site!, deploymentID: deploymentId(site!.locationID, date), comments: notes.trim() });
                 setStep('send');
               }}
-              className={`${bigPrimary} h-[72px] px-12 text-[26px]`}
+              className={`${bigPrimary} h-[72px] px-12`}
             >
               Finish
             </button>
@@ -140,13 +140,13 @@ function Screen({ question, back, onBack, folder, bar, children }: { question: s
             </button>
           )}
           {folder && (
-            <span className="ml-auto min-w-0 truncate text-[18px] text-inkSoft" data-testid="folder">
-              Folder: <span className="font-mono text-[17px] text-ink">{folder}</span>
+            <span className="ml-auto min-w-0 truncate text-detail text-inkSoft" data-testid="folder">
+              Folder: <span className="font-mono text-detail text-ink">{folder}</span>
             </span>
           )}
         </div>
         {bar}
-        <h1 className="font-display text-[38px] leading-tight font-[600] text-ink mb-6">{question}</h1>
+        <h1 className="font-display text-title leading-tight font-[600] text-ink mb-6">{question}</h1>
         {children}
       </div>
     </main>
@@ -169,24 +169,24 @@ function SitePicker({ sites, chosen, onPick }: { sites: Site[]; chosen?: Site; o
         aria-label="Find a site"
         autoComplete="off"
         spellCheck={false}
-        className="w-full h-16 px-4 border-2 border-ink bg-panel text-[22px] text-ink placeholder:text-inkMute focus:outline focus:outline-[3px] focus:outline-offset-2 focus:outline-accent"
+        className="w-full h-16 px-4 border-2 border-ink bg-panel text-lead text-ink placeholder:text-inkMute focus:outline focus:outline-[3px] focus:outline-offset-2 focus:outline-accent"
       />
       <ul aria-label="Sites" className="h-[min(52dvh,440px)] overflow-y-auto border border-rule bg-panel">
-        {!shown.length && <li className="px-4 py-4 text-[20px] text-inkSoft">No site has that name. Try a shorter word.</li>}
+        {!shown.length && <li className="px-4 py-4 text-body text-inkSoft">No site has that name. Try a shorter word.</li>}
         {shown.map((s) => (
           <li key={s.locationID} className="border-b border-ruleSoft last:border-b-0">
             <button
               onClick={() => onPick(s)}
-              className={`w-full min-h-16 px-4 py-2 flex items-center gap-3 text-left text-[22px] ${
+              className={`w-full min-h-16 px-4 py-2 flex items-center gap-3 text-left text-lead ${
                 s.locationID === chosen?.locationID ? 'bg-mark text-ink' : 'text-ink hover:bg-paperHover'
               } ${focusRing} -outline-offset-[3px]`}
             >
               <span className="flex-1 min-w-0">
                 {s.locationName}
-                {rangeOf(s.deploymentGroups) && <span className="block text-[17px] text-inkSoft">{rangeOf(s.deploymentGroups)}</span>}
+                {rangeOf(s.deploymentGroups) && <span className="block text-detail text-inkSoft">{rangeOf(s.deploymentGroups)}</span>}
               </span>
-              <span className="shrink-0 font-mono text-[18px] text-inkSoft">{s.locationID}</span>
-              <span aria-hidden className="text-inkMute text-[26px]">
+              <span className="shrink-0 font-mono text-detail text-inkSoft">{s.locationID}</span>
+              <span aria-hidden className="text-inkMute text-heading">
                 ›
               </span>
             </button>
@@ -202,7 +202,7 @@ function DatePicker({ date, guess, onPick }: { date: string; guess?: string; onP
   const choice = (iso: string, label: string) => (
     <button onClick={() => onPick(iso)} className={`${bigSecondary.replace('bg-panel ', iso === date ? 'bg-mark ' : 'bg-panel ')} w-full justify-between`}>
       <span>{label}</span>
-      <span className="text-[20px] font-[400] text-inkSoft">{longDay(iso)}</span>
+      <span className="text-body font-[400] text-inkSoft">{longDay(iso)}</span>
     </button>
   );
   return (
@@ -211,7 +211,7 @@ function DatePicker({ date, guess, onPick }: { date: string; guess?: string; onP
       {choice(daysAgo(0), 'Today')}
       {choice(daysAgo(1), 'Yesterday')}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <label htmlFor="other-day" className="text-[20px] text-inkSoft">
+        <label htmlFor="other-day" className="text-body text-inkSoft">
           Another day:
         </label>
         <input
@@ -220,9 +220,9 @@ function DatePicker({ date, guess, onPick }: { date: string; guess?: string; onP
           value={other}
           max={daysAgo(0)}
           onChange={(e) => setOther(e.target.value)}
-          className={`h-14 px-3 border border-rule bg-panel text-[20px] text-ink ${focusRing}`}
+          className={`h-14 px-3 border border-rule bg-panel text-body text-ink ${focusRing}`}
         />
-        <button disabled={!/^\d{4}-\d{2}-\d{2}$/.test(other) || other > daysAgo(0)} onClick={() => onPick(other)} className={`${bigPrimary} h-14 px-6 text-[20px]`}>
+        <button disabled={!/^\d{4}-\d{2}-\d{2}$/.test(other) || other > daysAgo(0)} onClick={() => onPick(other)} className={`${bigPrimary} h-14 px-6`}>
           Next
         </button>
       </div>
@@ -269,33 +269,33 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
         {state === 'looking' ? (
           <>
             <PawStamp />
-            <p className="text-[22px] text-inkSoft">Looking for photos…</p>
+            <p className="text-lead text-inkSoft">Looking for photos…</p>
           </>
         ) : found ? (
           <>
-            <p className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="found">
+            <p className="font-display text-hero leading-tight font-[600] text-ink" data-testid="found">
               {counted(namesOf(card))} found
             </p>
             {folderOf(card) && (
-              <p className="-mt-3 text-[20px] text-inkSoft">
-                in <span className="font-mono text-[19px] text-ink">{folderOf(card)}</span>
+              <p className="-mt-3 text-body text-inkSoft">
+                in <span className="font-mono text-body text-ink">{folderOf(card)}</span>
               </p>
             )}
-            <button onClick={onNext} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
+            <button onClick={onNext} className={`${bigPrimary} h-[72px] px-12`}>
               Next
             </button>
           </>
         ) : (
           <>
             {(state === 'empty' || state === 'failed') && (
-              <p className="text-[22px] text-warn">
+              <p className="text-lead text-warn">
                 {state === 'failed' ? 'That folder couldn’t be read. Try again.' : 'No photos in that folder. Choose another one.'}
               </p>
             )}
-            <button onClick={() => picker.current!.click()} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
+            <button onClick={() => picker.current!.click()} className={`${bigPrimary} h-[72px] px-12`}>
               Choose the folder
             </button>
-            <p className="text-[20px] text-inkSoft">or drag it here</p>
+            <p className="text-body text-inkSoft">or drag it here</p>
           </>
         )}
       </div>
@@ -475,7 +475,7 @@ function UploadBar({ upload, card }: { upload: Upload; card: CardFile[] }) {
   return (
     <div className="h-[76px] mb-6 flex flex-col justify-center gap-2 px-4 border border-ruleSoft bg-panel" data-testid="upload-bar">
       <Bar pct={c.pct} />
-      <p className="text-[18px] text-inkSoft tabular-nums truncate">
+      <p className="text-detail text-inkSoft tabular-nums truncate">
         {!upload.online
           ? 'No internet. Uploading will carry on when it’s back.'
           : c.waiting
@@ -494,18 +494,18 @@ function BigProgress({ upload, card, line }: { upload: Upload; card: CardFile[];
   const { error, online } = upload;
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-[22px] text-inkSoft">{line}</p>
+      <p className="text-lead text-inkSoft">{line}</p>
       <Bar pct={c.pct} thick />
-      <p className="h-12 font-display text-[36px] font-[600] text-ink tabular-nums" data-testid="sent-count">
+      <p className="h-12 font-display text-title font-[600] text-ink tabular-nums" data-testid="sent-count">
         {c.uploading ? `${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded` : 'Getting the photos ready…'}
       </p>
-      <p className="h-8 text-[22px] text-ink tabular-nums" data-testid="pace">
+      <p className="h-8 text-lead text-ink tabular-nums" data-testid="pace">
         {[speed, left].filter(Boolean).join(' · ')}
       </p>
-      <p className="h-8 text-[20px] text-inkSoft">{c.already > 0 && `${c.already.toLocaleString()} already saved`}</p>
+      <p className="h-8 text-body text-inkSoft">{c.already > 0 && `${c.already.toLocaleString()} already saved`}</p>
       {error?.signIn ? (
         <div className="flex flex-col items-start gap-4">
-          <p role="alert" className="text-[22px] text-warn">
+          <p role="alert" className="text-lead text-warn">
             {error.message}
           </p>
           <a href="#" className={bigPrimary}>
@@ -513,15 +513,15 @@ function BigProgress({ upload, card, line }: { upload: Upload; card: CardFile[];
           </a>
         </div>
       ) : !online ? (
-        <p role="status" className="text-[22px] text-warn">
+        <p role="status" className="text-lead text-warn">
           No internet. Uploading will carry on when it’s back.
         </p>
       ) : error ? (
-        <p role="status" className="text-[22px] text-inkSoft">
+        <p role="status" className="text-lead text-inkSoft">
           {error.message}
         </p>
       ) : (
-        <p className="text-[22px] text-inkSoft">You can leave this open. The screen stays awake until it’s done.</p>
+        <p className="text-lead text-inkSoft">You can leave this open. The screen stays awake until it’s done.</p>
       )}
     </div>
   );
@@ -535,33 +535,33 @@ function Done({ outcome, line, card }: { outcome: Outcome; line: string; card: C
   return (
     <main className="h-full overflow-y-auto">
       <div className="max-w-[760px] mx-auto px-6 pt-[72px] pb-10 flex flex-col items-start gap-6">
-        <p aria-hidden className="w-20 h-20 grid place-items-center rounded-full bg-ok text-paper text-[44px]">
+        <p aria-hidden className="w-20 h-20 grid place-items-center rounded-full bg-ok text-paper text-hero">
           ✓
         </p>
-        <h1 className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="saved">
+        <h1 className="font-display text-hero leading-tight font-[600] text-ink" data-testid="saved">
           {uploadedLine(saved, all)}
         </h1>
-        <p className="-mt-2 text-[22px] text-inkSoft">{line}</p>
-        {outcome.alreadySaved.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.alreadySaved)} {wasWere(outcome.alreadySaved)} already uploaded before.</p>}
-        {outcome.leftOut.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.leftOut)} couldn’t be read, so they were left out.</p>}
+        <p className="-mt-2 text-lead text-inkSoft">{line}</p>
+        {outcome.alreadySaved.length > 0 && <p className="text-lead text-inkSoft">{counted(outcome.alreadySaved)} {wasWere(outcome.alreadySaved)} already uploaded before.</p>}
+        {outcome.leftOut.length > 0 && <p className="text-lead text-inkSoft">{counted(outcome.leftOut)} couldn’t be read, so they were left out.</p>}
         {outcome.notCleaned.length > 0 && (
-          <p className="text-[22px] text-inkSoft">
+          <p className="text-lead text-inkSoft">
             {counted(outcome.notCleaned)} couldn’t be cleaned of {oneNotCleaned ? 'its' : 'their'} camera data, so{' '}
             {oneNotCleaned ? 'it wasn’t' : 'they weren’t'} uploaded.
           </p>
         )}
         {outcome.tooBig.length > 0 && (
-          <p className="text-[22px] text-inkSoft">
+          <p className="text-lead text-inkSoft">
             {counted(outcome.tooBig)} {outcome.tooBig.length === 1 ? 'is' : 'are'} too big to upload (over 256 MB).
           </p>
         )}
         <div className="mt-4 flex flex-wrap gap-4">
           {outcome.cardHasPhotos && (
-            <a href={`${TAG_URL}#card=${encodeURIComponent(outcome.deploymentID)}`} className={`${bigPrimary} h-[72px] px-12 text-[26px]`}>
+            <a href={`${TAG_URL}#card=${encodeURIComponent(outcome.deploymentID)}`} className={`${bigPrimary} h-[72px] px-12`}>
               Tag them now
             </a>
           )}
-          <a href="#" className={`${bigSecondary} h-[72px] text-[24px]`}>
+          <a href="#" className={`${bigSecondary} h-[72px]`}>
             Back to the start
           </a>
         </div>

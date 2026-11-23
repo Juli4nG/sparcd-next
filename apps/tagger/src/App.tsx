@@ -86,21 +86,21 @@ function Leaving({ failed, onRetry, onLeave }: { failed: boolean; onRetry: () =>
   if (!failed)
     return (
       <Dialog label="Saving" onClose={() => {}}>
-        <p role="status" className="px-6 py-8 text-[20px] text-center text-inkSoft">
+        <p role="status" className="px-6 py-8 text-body text-center text-inkSoft">
           Saving…
         </p>
       </Dialog>
     );
   return (
     <Dialog label="Not saved" onClose={onRetry}>
-      <p role="alert" className="px-6 pt-6 text-[20px] text-warn">
+      <p role="alert" className="px-6 pt-6 text-body text-warn">
         We couldn't save your latest tags yet. This computer keeps them and saves them next time you open these photos.
       </p>
       <div className="flex justify-end gap-3 p-6">
-        <button onClick={onRetry} className={`h-14 px-5 border border-ink bg-ink text-paper text-[20px] ${focusRing}`}>
+        <button onClick={onRetry} className={`h-14 px-5 border border-ink bg-ink text-paper text-body ${focusRing}`}>
           Try again
         </button>
-        <button onClick={onLeave} className={`h-14 px-5 border border-rule text-[20px] ${focusRing}`}>
+        <button onClick={onLeave} className={`h-14 px-5 border border-rule text-body ${focusRing}`}>
           Leave anyway
         </button>
       </div>

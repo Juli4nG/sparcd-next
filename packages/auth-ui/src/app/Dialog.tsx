@@ -61,10 +61,10 @@ export function Dialog({ label, onClose, children, wide }: { label: string; onCl
 export function DialogHeader({ title, onClose }: { title: ReactNode; onClose: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-3">
-      <h2 className="font-display text-[20px] font-[600] text-ink min-w-0">{title}</h2>
+      <h2 className="font-display text-body font-[600] text-ink min-w-0">{title}</h2>
       <button
         onClick={onClose}
-        className="shrink-0 w-11 h-11 grid place-items-center border border-rule text-[15px] text-inkSoft hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        className="shrink-0 w-11 h-11 grid place-items-center border border-rule text-small text-inkSoft hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         aria-label="Close"
       >
         ✕

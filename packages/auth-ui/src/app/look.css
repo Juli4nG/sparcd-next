@@ -66,7 +66,7 @@ body {
 }
 
 /* Block iOS focus auto-zoom by keeping every field at >=16px on small screens.
-   !important is required to win over Tailwind's text-[Npx] utility classes
+   !important is required to win over the type scale's text-* utility classes
    (higher specificity); scoped to <=640px so desktop field sizing is untouched. */
 @media (max-width: 640px) {
   input,

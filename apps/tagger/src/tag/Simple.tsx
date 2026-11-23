@@ -154,10 +154,10 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="shrink-0 h-16 flex items-center gap-5 px-5 border-b border-rule bg-panel">
-        <a href="#" className={`shrink-0 min-h-11 inline-flex items-center text-[20px] text-accent underline underline-offset-4 ${focusRing}`}>
+        <a href="#" className={`shrink-0 min-h-11 inline-flex items-center text-body text-accent underline underline-offset-4 ${focusRing}`}>
           ← Back
         </a>
-        <h1 className="min-w-0 truncate font-display text-[24px] font-[600] text-ink">{title}</h1>
+        <h1 className="min-w-0 truncate font-display text-lead font-[600] text-ink">{title}</h1>
         <Progress done={tagged} total={photos.length} />
         <SaveIndicator status={tagging.status} />
       </div>
@@ -204,10 +204,10 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
               <NavButton side="right" hidden={focus === photos.length - 1} onClick={() => go(focus + 1)} />
             </div>
             <div className="shrink-0 h-12 flex items-center gap-4">
-              <span className="shrink-0 text-[20px] text-inkSoft tabular-nums">
+              <span className="shrink-0 text-body text-inkSoft tabular-nums">
                 {Word} {no(focus)} of {photos.length.toLocaleString()} <span className="text-inkMute">· {clock(current.timestamp)}</span>
               </span>
-              <span role="status" className="ml-auto min-w-0 truncate text-[20px] text-ink" data-testid="receipt">
+              <span role="status" className="ml-auto min-w-0 truncate text-body text-ink" data-testid="receipt">
                 {receipt && (
                   <span key={receipt.n} className="fn-rise inline-flex items-center gap-2">
                     {receipt.text !== 'Undone' && <span className="text-ok" aria-hidden>✓</span>}
@@ -219,7 +219,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                 onClick={undo}
                 disabled={!tagging.canUndo}
                 title="Undo (Ctrl+Z)"
-                className={`shrink-0 h-12 px-4 border border-ink bg-paper text-[20px] text-ink hover:bg-paperHover disabled:border-ruleSoft disabled:text-inkMute disabled:bg-transparent ${press} ${focusRing}`}
+                className={`shrink-0 h-12 px-4 border border-ink bg-paper text-body text-ink hover:bg-paperHover disabled:border-ruleSoft disabled:text-inkMute disabled:bg-transparent ${press} ${focusRing}`}
               >
                 ↶ Undo
               </button>
@@ -229,23 +229,23 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
 
           <aside className="border-t border-rule px-6 py-5 flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:overflow-y-auto min-[900px]:border-t-0 min-[900px]:border-l" aria-label={`What’s in this ${word}?`}>
             {/* Room for two lines either way, so the thank-you doesn't push the answers down. */}
-            <h2 className={`h-[4.75rem] shrink-0 font-display text-[30px] leading-tight font-[600] ${finished ? 'text-ok' : 'text-ink'}`}>
+            <h2 className={`h-[4.75rem] shrink-0 font-display text-heading leading-tight font-[600] ${finished ? 'text-ok' : 'text-ink'}`}>
               {finished ? 'Every photo is tagged. Thank you!' : `What’s in this ${word}?`}
             </h2>
 
             {untagged ? (
               <div className="h-14 flex items-center justify-between gap-3">
-                <span className="text-[20px] text-ink">How many?</span>
+                <span className="text-body text-ink">How many?</span>
                 <Stepper value={count} onChange={setCount} label="How many animals" />
               </div>
             ) : (
               <div className="min-h-14 flex flex-col gap-2">
                 {currentTags.map((t) => (
                   <div key={t.key} className="h-14 flex items-center gap-3 pl-3 bg-panel border border-rule">
-                    <span className="text-ok text-[20px]" aria-hidden>
+                    <span className="text-ok text-body" aria-hidden>
                       ✓
                     </span>
-                    <span className="flex-1 min-w-0 truncate text-[20px] font-[550] text-ink">{nameOf(t)}</span>
+                    <span className="flex-1 min-w-0 truncate text-body font-[550] text-ink">{nameOf(t)}</span>
                     {t.observationType !== 'blank' && (
                       <Stepper
                         inRow
@@ -257,7 +257,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                     <button
                       onClick={() => change([current.mediaID], (list) => removeTag(list, t.key), `Took ${nameOf(t)} off ${word} ${no(focus)}`)}
                       aria-label={`Take ${nameOf(t)} off this ${word}`}
-                      className={`h-14 w-14 shrink-0 grid place-items-center text-[24px] text-inkSoft hover:text-warn hover:bg-paperHover ${focusRing}`}
+                      className={`h-14 w-14 shrink-0 grid place-items-center text-lead text-inkSoft hover:text-warn hover:bg-paperHover ${focusRing}`}
                     >
                       ✕
                     </button>
@@ -281,14 +281,14 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
               </BigChoice>
             </div>
             {finished && (
-              <a href="#" className={`self-start inline-flex h-14 items-center px-5 bg-ink text-paper text-[20px] ${focusRing}`}>
+              <a href="#" className={`self-start inline-flex h-14 items-center px-5 bg-ink text-paper text-body ${focusRing}`}>
                 Back to the start
               </a>
             )}
           </aside>
         </div>
       ) : (
-        <p className="p-8 text-[20px] text-inkSoft">This upload has no photos.</p>
+        <p className="p-8 text-body text-inkSoft">This upload has no photos.</p>
       )}
 
       {picker && (
@@ -313,7 +313,7 @@ function clock(timestamp: string): string {
 function Progress({ done, total }: { done: number; total: number }) {
   return (
     <div className="ml-auto shrink-0 flex flex-col items-end gap-1.5" data-testid="progress">
-      <span className="text-[20px] text-ink tabular-nums whitespace-nowrap">
+      <span className="text-body text-ink tabular-nums whitespace-nowrap">
         <b className="font-[650]">{done.toLocaleString()}</b> of {total.toLocaleString()} photos tagged
       </span>
       <span aria-hidden className="block h-1.5 w-full overflow-hidden rounded-full bg-ruleSoft">
@@ -329,7 +329,7 @@ function Progress({ done, total }: { done: number; total: number }) {
 function SaveIndicator({ status }: { status: SaveStatus }) {
   const text = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: "Couldn't save yet. Keep this page open." }[status];
   return (
-    <span role="status" data-save-status={status} className={`shrink-0 text-[20px] ${status === 'error' ? 'text-warn max-w-[16rem] leading-tight' : 'w-[6.5rem] text-ok'}`}>
+    <span role="status" data-save-status={status} className={`shrink-0 text-body ${status === 'error' ? 'text-warn max-w-[16rem] leading-tight' : 'w-[6.5rem] text-ok'}`}>
       {text}
     </span>
   );
@@ -341,7 +341,7 @@ function NavButton({ side, hidden, onClick }: { side: 'left' | 'right'; hidden: 
       onClick={onClick}
       aria-label={side === 'left' ? 'Previous photo' : 'Next photo'}
       title={side === 'left' ? 'Previous photo (←)' : 'Next photo (→)'}
-      className={`absolute top-1/2 ${side === 'left' ? 'left-3' : 'right-3'} -translate-y-1/2 w-14 h-14 grid place-items-center rounded-full bg-paper/80 text-[34px] leading-none text-ink shadow hover:bg-paper ${hidden ? 'invisible' : ''} ${focusRing}`}
+      className={`absolute top-1/2 ${side === 'left' ? 'left-3' : 'right-3'} -translate-y-1/2 w-14 h-14 grid place-items-center rounded-full bg-paper/80 text-title leading-none text-ink shadow hover:bg-paper ${hidden ? 'invisible' : ''} ${focusRing}`}
     >
       <span aria-hidden className="-mt-1">
         {side === 'left' ? '‹' : '›'}
@@ -383,13 +383,13 @@ function Strip({ card, photos, tags, focus, onPick }: {
 }
 
 function Stepper({ value, onChange, label, inRow }: { value: number; onChange: (n: number) => void; label: string; inRow?: boolean }) {
-  const step = `w-14 h-14 grid place-items-center text-[28px] leading-none text-ink hover:bg-paperHover disabled:text-ruleSoft disabled:hover:bg-transparent ${focusRing}`;
+  const step = `w-14 h-14 grid place-items-center text-heading leading-none text-ink hover:bg-paperHover disabled:text-ruleSoft disabled:hover:bg-transparent ${focusRing}`;
   return (
     <div role="group" aria-label={label} className={`shrink-0 flex items-center bg-panel ${inRow ? 'self-stretch border-x border-ruleSoft' : 'border border-rule'}`}>
       <button onClick={() => onChange(value - 1)} disabled={value <= 1} aria-label="One fewer" className={step}>
         −
       </button>
-      <output aria-live="polite" className="w-12 text-center text-[24px] font-[600] tabular-nums text-ink">
+      <output aria-live="polite" className="w-12 text-center text-lead font-[600] tabular-nums text-ink">
         {value}
       </output>
       <button onClick={() => onChange(value + 1)} disabled={value >= MAX_COUNT} aria-label="One more" className={step}>
@@ -418,11 +418,11 @@ function BigChoice({ children, on, strong, quiet, hint, onClick }: {
     <button
       onClick={onClick}
       aria-pressed={quiet ? undefined : !!on}
-      className={`relative h-16 [@media(min-height:860px)]:h-[76px] flex items-center gap-3 px-2.5 border text-left text-[20px] font-[550] ${look} ${press} ${focusRing}`}
+      className={`relative h-16 [@media(min-height:860px)]:h-[76px] flex items-center gap-3 px-2.5 border text-left text-body font-[550] ${look} ${press} ${focusRing}`}
     >
       {children}
       {hint && (
-        <kbd aria-hidden className={`absolute top-1 right-1.5 font-mono text-[13px] ${on ? 'text-paper/70' : 'text-inkMute'}`}>
+        <kbd aria-hidden className={`absolute top-1 right-1.5 font-mono text-small ${on ? 'text-paper/70' : 'text-inkMute'}`}>
           {hint}
         </kbd>
       )}
@@ -436,7 +436,7 @@ function SpeciesPicture({ species, size }: { species: Species; size: number }) {
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="shrink-0 grid place-items-center overflow-hidden bg-paperHover border border-ruleSoft font-display text-[22px] text-inkSoft"
+      className="shrink-0 grid place-items-center overflow-hidden bg-paperHover border border-ruleSoft font-display text-lead text-inkSoft"
     >
       {species.speciesIconURL && !broken ? (
         <img src={species.speciesIconURL} alt="" loading="lazy" onError={() => setBroken(true)} className="w-full h-full object-cover" />
@@ -454,7 +454,7 @@ function SomethingElse({ species, onPick, onClose }: { species: Species[]; onPic
   return (
     <Dialog label="Something else" onClose={onClose} wide>
       <div className="relative p-6">
-        <h2 className="font-display text-[30px] font-[600] text-ink">What did you see?</h2>
+        <h2 className="font-display text-heading font-[600] text-ink">What did you see?</h2>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -465,20 +465,20 @@ function SomethingElse({ species, onPick, onClose }: { species: Species[]; onPic
           }}
           aria-label="Search species"
           placeholder="Type a name, like fox"
-          className="mt-4 w-full h-16 px-4 border-2 border-ink bg-panel text-[22px] text-ink placeholder:text-inkMute focus:outline focus:outline-[3px] focus:outline-offset-2 focus:outline-accent"
+          className="mt-4 w-full h-16 px-4 border-2 border-ink bg-panel text-lead text-ink placeholder:text-inkMute focus:outline focus:outline-[3px] focus:outline-offset-2 focus:outline-accent"
         />
         <ul className="mt-4 h-[min(52dvh,440px)] overflow-y-auto grid grid-cols-2 content-start gap-2 pr-1" aria-label="Species">
           {results.map((s) => (
             <li key={s.scientificName + s.name}>
-              <button onClick={() => onPick(s)} className={`w-full h-16 flex items-center gap-3 px-2.5 border border-rule bg-panel text-left text-[20px] text-ink hover:border-ink hover:bg-paperHover ${press} ${focusRing}`}>
+              <button onClick={() => onPick(s)} className={`w-full h-16 flex items-center gap-3 px-2.5 border border-rule bg-panel text-left text-body text-ink hover:border-ink hover:bg-paperHover ${press} ${focusRing}`}>
                 <SpeciesPicture species={s} size={44} />
                 <span className="min-w-0 line-clamp-2 leading-[1.15]">{s.name}</span>
               </button>
             </li>
           ))}
-          {!results.length && <li className="col-span-2 py-6 text-[20px] text-inkSoft">Nothing matches that name. Try a shorter word.</li>}
+          {!results.length && <li className="col-span-2 py-6 text-body text-inkSoft">Nothing matches that name. Try a shorter word.</li>}
         </ul>
-        <button onClick={onClose} aria-label="Close" className={`absolute top-5 right-5 w-14 h-14 grid place-items-center border border-rule text-[22px] text-inkSoft hover:text-ink ${focusRing}`}>
+        <button onClick={onClose} aria-label="Close" className={`absolute top-5 right-5 w-14 h-14 grid place-items-center border border-rule text-lead text-inkSoft hover:text-ink ${focusRing}`}>
           ✕
         </button>
       </div>

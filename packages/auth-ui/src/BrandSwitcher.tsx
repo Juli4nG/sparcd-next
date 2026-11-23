@@ -101,14 +101,14 @@ export function BrandSwitcher({ toolName, tools: given }: BrandSwitcherProps) {
         className="flex items-center gap-2 px-1.5 py-1 text-ink hover:bg-ruleSoft/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       >
         <img src={logo} alt="" className="h-7 w-auto" />
-        <span className="font-display text-[20px] font-[600] leading-none whitespace-nowrap">
+        <span className="font-display text-body font-[600] leading-none whitespace-nowrap">
           {/* At phone width the person's name needs the room more than the family name. */}
           <span className="max-sm:hidden">
             SPARC'd <span className="text-inkMute">·</span>{' '}
           </span>
           {toolName}
         </span>
-        <span aria-hidden className="text-inkMute text-[12px] leading-none">
+        <span aria-hidden className="text-inkMute text-chip leading-none">
           ▾
         </span>
       </button>
@@ -122,9 +122,9 @@ export function BrandSwitcher({ toolName, tools: given }: BrandSwitcherProps) {
           {tools.map((t, i) => {
             const current = t.name === toolName;
             const className =
-              'flex items-center gap-2 px-3 py-1.5 text-[14px] font-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2';
+              'flex items-center gap-2 px-3 py-1.5 text-small font-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2';
             const mark = (
-              <span aria-hidden className="w-3 text-accent text-[12px] leading-none">
+              <span aria-hidden className="w-3 text-accent text-chip leading-none">
                 {current ? '✓' : ''}
               </span>
             );

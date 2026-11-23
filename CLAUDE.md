@@ -23,10 +23,11 @@ dashboard.
   read/write, settings. The Uploader and Tagger are built on it.
 - `packages/camtrap` (`@sparcd/camtrap`): the Camtrap DP data contract.
 - `packages/auth-ui` (`@sparcd/auth-ui`): the shared sign-in, header shell,
-  dialog and look (`src/app/`).
+  dialog and look (`src/app/`), plus the Tailwind preset.
 - `e2e/`: Playwright browser tests against the local stack.
 - `docs/next/`: the contracts. `FORMAT.md` is the bucket layout, `GATE.md` is
-  the gate's rules and endpoints. Other files in `docs/` are history.
+  the gate's rules and endpoints, `LOOK.md` is the look every screen follows.
+  Other files in `docs/` are history.
 
 ## Storage model
 
@@ -66,6 +67,8 @@ a commit.
 
 - Each app does one thing well. When a new need appears, add an app rather
   than growing one.
+- Screens follow `docs/next/LOOK.md`: shared pieces from `@sparcd/auth-ui`,
+  sizes from the type scale, colours from tokens. The look tests enforce it.
 - Prefer designs that ship as a static bundle with no server-side state; the
   gate is the one server piece.
 - Per-feature optimization beats shared abstractions. Two apps may duplicate

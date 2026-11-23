@@ -61,5 +61,5 @@ export function OfflineApps() {
     window.addEventListener('online', online);
     return () => { current = false; window.removeEventListener('online', online); };
   }, []);
-  return message ? <p role="status" className="p-3 text-sm">{message}</p> : null;
+  return message ? <p role="status" className="p-3 text-small">{message}</p> : null;
 }

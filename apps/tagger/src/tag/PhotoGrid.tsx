@@ -82,7 +82,7 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
               key={f.id}
               onClick={() => onFilter(f.id)}
               aria-pressed={filter === f.id}
-              className={`min-h-12 px-2 py-1 leading-tight text-[18px] ${filter === f.id ? 'bg-ink text-paper font-[600]' : 'bg-panel text-ink hover:bg-paperHover'} ${focusRing}`}
+              className={`min-h-12 px-2 py-1 leading-tight text-detail ${filter === f.id ? 'bg-ink text-paper font-[600]' : 'bg-panel text-ink hover:bg-paperHover'} ${focusRing}`}
             >
               {f.label} <span className="tabular-nums">({counts[f.id].toLocaleString()})</span>
             </button>
@@ -97,7 +97,7 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
         style={{ padding: PAD }}
       >
         {!shown.length && (
-          <p className="text-[20px] text-inkSoft">{filter === 'left' ? 'Every photo is tagged.' : 'No photo is tagged yet.'}</p>
+          <p className="text-body text-inkSoft">{filter === 'left' ? 'Every photo is tagged.' : 'No photo is tagged yet.'}</p>
         )}
         <div className="relative" style={{ height: Math.max(0, rows * rowH - GAP) }}>
           <ol
@@ -129,7 +129,7 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
                     {label && (
                       <>
                         <TaggedMark className="absolute top-1 left-1 w-7 h-7" />
-                        <span className="absolute inset-x-0 bottom-0 truncate px-2 py-1 bg-[#172018]/80 text-left text-[15px] font-[550] text-white">{label}</span>
+                        <span className="absolute inset-x-0 bottom-0 truncate px-2 py-1 bg-frame/80 text-left text-small font-[550] text-white">{label}</span>
                       </>
                     )}
                   </button>

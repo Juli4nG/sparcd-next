@@ -60,7 +60,7 @@ export function ConnectionChip({ identity, onDisconnect, disconnectDisabled, dis
 
   return (
     // At phone width only the name and Logout fit beside the app name, so the host and key drop out.
-    <div className="flex min-w-0 items-center gap-x-2.5 font-mono text-[12px] text-inkSoft">
+    <div className="flex min-w-0 items-center gap-x-2.5 font-mono text-chip text-inkSoft">
       {!online && (
         <span className="inline-flex items-center gap-1 text-warn" title="No network connection">
           <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-warn" />
@@ -95,7 +95,7 @@ export function ConnectionChip({ identity, onDisconnect, disconnectDisabled, dis
         disabled={disconnectDisabled}
         aria-description={disconnectExplanation}
         title={disconnectExplanation ?? "End this session and log out"}
-        className="ml-1 shrink-0 border border-rule px-2 py-0.5 text-[11px] font-body text-inkSoft hover:text-ink hover:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+        className="shrink-0 min-h-8 border border-rule px-1.5 py-0.5 text-small font-body text-inkSoft hover:text-ink hover:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       >
         Logout
       </button>

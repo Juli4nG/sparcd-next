@@ -17,7 +17,7 @@ export function OfflineBanner({ message }: OfflineBannerProps) {
   return (
     <div
       role="status"
-      className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-[13px] text-warn"
+      className="border border-warn/40 bg-paper px-3 py-2.5 font-body text-small text-warn"
     >
       {message ?? "You're offline — actions that need the network won't work until your connection is back."}
     </div>
