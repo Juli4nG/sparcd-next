@@ -15,6 +15,7 @@ vi.mock('../src/send/pool', () => ({
     read: async (file: File) => ({ sha256: sha(file.name), dateTimeOriginal: '2026:11:17 10:00:00' }),
     derive: async (file: File, frame?: unknown) => {
       if (file.name === 'BAD.JPG') throw Object.assign(new Error('The source image could not be decoded.'), { name: 'InvalidStateError' });
+      if (file.name === 'PACKED.MOV') throw Object.assign(new Error('MP4 movie header is compressed'), { name: 'CameraDataError' });
       if (frame) frames.push(file.name);
       busy.now += file.size;
       busy.max = Math.max(busy.max, busy.now);
@@ -130,6 +131,15 @@ describe('sendCard', () => {
     const csv = store.get('media.csv')!;
     expect(csv).toContain(',CLIP_1.MP4,video/mp4,');
     expect(csv).toContain(',CLIP_2.MOV,video/quicktime,');
+  });
+
+  it('never uploads a video whose camera data could not be removed, and names it apart', async () => {
+    const { store, session } = fakeSession();
+    const outcome = await send(session, 'x_2026-11-17', [...card, sized('PACKED.MOV', 10)]);
+    expect(outcome.notCleaned).toEqual(['PACKED.MOV']);
+    expect(outcome.leftOut).toEqual(['BAD.JPG']);
+    expect(puts.some((k) => k.includes(sha('PACKED.MOV')))).toBe(false);
+    expect(store.get('media.csv')).not.toContain('PACKED.MOV');
   });
 
   it('leaves out a file over the size limit without reading it, and counts it as done', async () => {

@@ -529,7 +529,8 @@ function BigProgress({ upload, card, line }: { upload: Upload; card: CardFile[];
 
 function Done({ outcome, line, card }: { outcome: Outcome; line: string; card: CardFile[] }) {
   const all = tally(namesOf(card));
-  const out = tally([...outcome.leftOut, ...outcome.tooBig]);
+  const out = tally([...outcome.leftOut, ...outcome.notCleaned, ...outcome.tooBig]);
+  const oneNotCleaned = outcome.notCleaned.length === 1;
   const saved = { photos: all.photos - out.photos, videos: all.videos - out.videos };
   return (
     <main className="h-full overflow-y-auto">
@@ -543,6 +544,12 @@ function Done({ outcome, line, card }: { outcome: Outcome; line: string; card: C
         <p className="-mt-2 text-[22px] text-inkSoft">{line}</p>
         {outcome.alreadySaved.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.alreadySaved)} were already uploaded before.</p>}
         {outcome.leftOut.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.leftOut)} couldn’t be read, so they were left out.</p>}
+        {outcome.notCleaned.length > 0 && (
+          <p className="text-[22px] text-inkSoft">
+            {counted(outcome.notCleaned)} couldn’t be cleaned of {oneNotCleaned ? 'its' : 'their'} camera data, so{' '}
+            {oneNotCleaned ? 'it wasn’t' : 'they weren’t'} uploaded.
+          </p>
+        )}
         {outcome.tooBig.length > 0 && (
           <p className="text-[22px] text-inkSoft">
             {counted(outcome.tooBig)} {outcome.tooBig.length === 1 ? 'is' : 'are'} too big to upload (over 256 MB).

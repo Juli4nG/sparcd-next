@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mp4Time, stripMp4 } from '../src/send/mp4';
+import { NOT_CLEANED, mp4Time, stripMp4 } from '../src/send/mp4';
 
 const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
 const cat = (...parts: Uint8Array[]) => {
@@ -123,5 +123,104 @@ describe('stripMp4', () => {
   it('refuses a file whose boxes run past its end', () => {
     const file = cat(ftyp, mdat(16)).subarray(0, ftyp.length + 10);
     expect(() => stripMp4(file.slice().buffer)).toThrow(expect.objectContaining({ name: 'EncodingError' }));
+  });
+});
+
+describe('stripMp4 on timed metadata tracks', () => {
+  const u32 = (...ns: number[]) => {
+    const out = new Uint8Array(ns.length * 4);
+    ns.forEach((n, i) => new DataView(out.buffer).setUint32(i * 4, n));
+    return out;
+  };
+  const u64 = (...ns: number[]) => {
+    const out = new Uint8Array(ns.length * 8);
+    ns.forEach((n, i) => new DataView(out.buffer).setBigUint64(i * 8, BigInt(n)));
+    return out;
+  };
+  /** A box with a zero version and flags before its fields. */
+  const full = (type: string, ...fields: Uint8Array[]) => box(type, new Uint8Array(4), ...fields);
+  /** `uniform` writes one size for all of `sizes`, which must then be equal. */
+  type Table = { handler: string; format: string; sizes: number[]; uniform?: boolean; runs: [number, number][]; chunks: number[]; wide?: boolean };
+  const trak = ({ handler, format, sizes, uniform, runs, chunks, wide }: Table) =>
+    box(
+      'trak',
+      box('tkhd', new Uint8Array(20)),
+      box(
+        'mdia',
+        box('mdhd', new Uint8Array(20)),
+        full('hdlr', u32(0), ascii(handler), new Uint8Array(12)),
+        box(
+          'minf',
+          box(
+            'stbl',
+            full('stsd', u32(1), box(format, new Uint8Array(8))),
+            uniform ? full('stsz', u32(sizes[0], sizes.length)) : full('stsz', u32(0, sizes.length, ...sizes)),
+            full('stsc', u32(runs.length, ...runs.flatMap(([first, per]) => [first, per, 1]))),
+            wide ? full('co64', u32(chunks.length), u64(...chunks)) : full('stco', u32(chunks.length, ...chunks)),
+          ),
+        ),
+      ),
+    );
+  // Samples live in one mdat right after ftyp; offsets below are into its payload.
+  const MDAT = ftyp.length + 8;
+  const at = (n: number) => MDAT + n;
+  const video = trak({ handler: 'vide', format: 'avc1', sizes: [16], runs: [[1, 1]], chunks: [at(0)] });
+  const movie = (...traks: Uint8Array[]) => cat(ftyp, mdat(200), box('moov', mvhd(0, 0), ...traks));
+  /** Indices where `out` differs from `file`, as [from, to) runs. */
+  const changed = (file: Uint8Array, out: Uint8Array) => {
+    const runs: [number, number][] = [];
+    for (let i = 0; i < file.length; i++) {
+      if (file[i] === out[i]) continue;
+      const last = runs.at(-1);
+      if (last && last[1] === i) last[1]++;
+      else runs.push([i, i + 1]);
+    }
+    return runs;
+  };
+
+  it('zeroes every sample of a meta-handler GPS track in place and leaves the video samples alone', () => {
+    const gps = trak({ handler: 'meta', format: 'gpmd', sizes: [5, 7, 9], runs: [[1, 2], [2, 1]], chunks: [at(20), at(120)] });
+    const file = movie(video, gps);
+    const out = stripMp4(file.slice().buffer);
+    expect(out.length).toBe(file.length);
+    expect(changed(file, out)).toEqual([[at(20), at(32)], [at(120), at(129)]]);
+  });
+
+  it('finds a track by its sample format too, with 64-bit chunk offsets and one sample size', () => {
+    const camm = trak({ handler: 'camm', format: 'camm', sizes: [4, 4, 4, 4, 4, 4], uniform: true, runs: [[1, 3]], chunks: [at(40), at(60)], wide: true });
+    const file = movie(video, camm);
+    expect(changed(file, stripMp4(file.slice().buffer))).toEqual([[at(40), at(52)], [at(60), at(72)]]);
+  });
+
+  it('refuses a compressed movie header, and a fragmented file with a metadata track', () => {
+    const notCleaned = expect.objectContaining({ name: NOT_CLEANED });
+    const compressed = cat(ftyp, box('moov', box('cmov', box('dcom', ascii('zlib')), box('cmvd', new Uint8Array(12)))));
+    expect(() => stripMp4(compressed.buffer)).toThrow(notCleaned);
+    const gps = trak({ handler: 'meta', format: 'mebx', sizes: [4], runs: [[1, 1]], chunks: [at(0)] });
+    const fragmented = cat(ftyp, mdat(200), box('moov', mvhd(0, 0), gps, box('mvex', box('trex', new Uint8Array(24)))));
+    expect(() => stripMp4(fragmented.buffer)).toThrow(notCleaned);
+    // Fragments alone are fine when no track holds metadata.
+    expect(() => stripMp4(cat(ftyp, mdat(200), box('moov', mvhd(0, 0), video, box('mvex'))).buffer)).not.toThrow();
+  });
+
+  it('leaves out as unreadable a sample past the end, a short table, deep nesting or too many boxes', () => {
+    const unreadable = (message: RegExp) => expect.objectContaining({ name: 'EncodingError', message: expect.stringMatching(message) });
+    const past = trak({ handler: 'meta', format: 'gpmd', sizes: [8], runs: [[1, 1]], chunks: [at(1_000_000)] });
+    expect(() => stripMp4(movie(past).buffer)).toThrow(unreadable(/sample runs past the end/));
+    const short = trak({ handler: 'meta', format: 'gpmd', sizes: [4, 4], runs: [[1, 1]], chunks: [at(0)] });
+    expect(() => stripMp4(movie(short).buffer)).toThrow(unreadable(/fewer samples/));
+    const lying = full('stsz', u32(0, 1000, 4));
+    const liar = box('trak', box('mdia', full('hdlr', u32(0), ascii('meta'), new Uint8Array(12)), box('minf', box('stbl', lying, full('stsc', u32(0)), full('stco', u32(0))))));
+    expect(() => stripMp4(movie(liar).buffer)).toThrow(unreadable(/table runs past its box/));
+
+    let deep = box('udta', ascii('+00.0000+000.0000/'));
+    for (let i = 0; i < 20; i++) deep = box('trak', deep);
+    expect(() => stripMp4(cat(ftyp, box('moov', deep)).buffer)).toThrow(unreadable(/too deep/));
+
+    // 100,001 empty free boxes, end to end.
+    const frees = new Uint8Array(100_001 * 8);
+    for (let i = 0; i < frees.length; i += 8) frees.set(box('free'), i);
+    expect(() => stripMp4(cat(ftyp, box('moov', frees)).buffer)).toThrow(unreadable(/too many boxes/));
+    expect(mp4Time(cat(frees, box('moov', mvhd(0, secondsSince1904('2026-11-17T06:30:05')))))).toBeUndefined();
   });
 });

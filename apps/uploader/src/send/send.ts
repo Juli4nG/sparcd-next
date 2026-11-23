@@ -12,6 +12,7 @@ import {
 } from '@sparcd/bucket';
 import type { ReadResult } from '../workers/photo.worker';
 import { byteBudget } from './budget';
+import { NOT_CLEANED } from './mp4';
 import { deploymentRow, keysOf, mediaRow, planSend, toPhotos, type Photo } from './photos';
 import { createPool, type Pool } from './pool';
 import { openShards, type Shards } from './shards';
@@ -39,6 +40,8 @@ export type Outcome = {
   alreadySaved: string[];
   /** Files that couldn't be read, decoded, or stored. */
   leftOut: string[];
+  /** Videos whose camera data couldn't all be found to remove, so they weren't uploaded. */
+  notCleaned: string[];
   /** Files over MAX_FILE_BYTES, never read. */
   tooBig: string[];
   deploymentID: string;
@@ -108,6 +111,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
     const readable = job.card.filter((c) => job.reads.has(c.file));
     const photos = toPhotos(readable, readable.map((c) => job.reads.get(c.file)!), job.lab.timeZone);
     const leftOut = unread.map((c) => c.file.name);
+    const notCleaned: string[] = [];
     const [known, stored] = await Promise.all([
       readTable(session.bucket, 'media').then((rows) => new Set(rows.map((m) => m.mediaID))),
       session.bucket.listKeys('Media/').then((keys) => new Set(keys)),
@@ -145,8 +149,9 @@ export async function sendCard(job: Job): Promise<Outcome> {
         await inFlight(photo.file.size, () => putPhoto(shards, photo, missing, pool));
         pending.push(photo);
       } catch (err) {
-        if (!photoProblem(err)) throw new PhotoError(photo.path, err);
-        leftOut.push(photo.file.name);
+        if (err instanceof Error && err.name === NOT_CLEANED) notCleaned.push(photo.file.name);
+        else if (photoProblem(err)) leftOut.push(photo.file.name);
+        else throw new PhotoError(photo.path, err);
       }
       job.onProgress({ phase: 'sending', done: ++done, total, startedAt, sentBefore });
       // Long uploads save rows as they go, once the details are in.
@@ -179,6 +184,7 @@ export async function sendCard(job: Job): Promise<Outcome> {
       total,
       alreadySaved: plan.skip.map((p) => p.file.name),
       leftOut,
+      notCleaned,
       tooBig: tooBig.map((c) => c.file.name),
       deploymentID,
       cardHasPhotos: !!saved?.media.some((m) => m.deploymentID === deploymentID),
