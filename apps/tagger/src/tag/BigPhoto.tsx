@@ -3,7 +3,7 @@ import type { Media } from '@sparcd/bucket';
 import { focusRing } from '@sparcd/auth-ui';
 import type { Card } from '../data/card';
 import { useImageUrl } from './Photo';
-import { BRIGHTEN, DOUBLE_TAP_ZOOM, NO_ZOOM, ORIGINAL_AT, brightenFilter, clampZoom, contained, zoomAt, type Size, type Zoom } from './view';
+import { BRIGHTEN, DOUBLE_TAP_ZOOM, NO_ZOOM, ORIGINAL_AT, brightenFilter, clampZoom, contained, isVideo, zoomAt, type Size, type Zoom } from './view';
 
 type Point = { x: number; y: number };
 type Gesture = { start: Zoom; from: Point; dist: number; moved: boolean };
@@ -16,10 +16,14 @@ const mid = (a: Point, b: Point) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
 /**
  * The large photo. Pinch, the wheel or a double tap zooms it up to 4×, and a drag moves around while zoomed.
  * Past 1.5× the full-size original loads over view.jpg. A new photo remounts it, which resets the zoom.
+ * A video plays over its view.jpg instead, without zoom; the still stays when it can't play.
  */
 export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; photo: Media; alt: string; brighten: number; onShown: () => void }) {
   // A failed load signs a fresh link once by itself; after that the person asks for it.
   const { url, failed, retry, onError } = useImageUrl(card, photo.mediaID, 'view');
+  const video = isVideo(photo);
+  // A share copies only the still, so a shared video has nothing to play.
+  const [cantPlay, setCantPlay] = useState(!card.own);
   const [loaded, setLoaded] = useState<string>();
   const [image, setImage] = useState<Size>();
   const [zoom, setZoomState] = useState(NO_ZOOM);
@@ -55,7 +59,8 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !sizes()) return;
+    // Capturing the pointer would take it from the video's controls.
+    if (video || e.button !== 0 || !sizes()) return;
     box.current!.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, at(e));
     begin(pointers.current.size > 1);
@@ -92,7 +97,7 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
     const s = sizes();
     const z = zoomRef.current;
     // At 1×, scrolling down still scrolls the page.
-    if (!s || (!e.ctrlKey && z.s === 1 && e.deltaY > 0)) return;
+    if (video || !s || (!e.ctrlKey && z.s === 1 && e.deltaY > 0)) return;
     e.preventDefault();
     const dy = e.deltaY * (e.deltaMode === 1 ? 40 : 1);
     setZoom(zoomAt(z, z.s * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.002)), at(e), s.photo, s.box));
@@ -108,8 +113,8 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   if (failed)
     return (
       <div className="absolute inset-0 grid place-content-center justify-items-center gap-5 p-8 text-center">
-        <p className="text-[20px] text-paper/80">This photo didn't load. Check your internet connection.</p>
-        <button onClick={retry} className={`h-14 px-6 border-2 border-paper/80 text-paper text-[20px] font-[600] hover:bg-paper/10 ${focusRing}`}>
+        <p className="text-[20px] text-frameInk/80">This {video ? 'video' : 'photo'} didn't load. Check your internet connection.</p>
+        <button onClick={retry} className={`h-14 px-6 border-2 border-frameInk/80 text-frameInk text-[20px] font-[600] hover:bg-frameInk/10 ${focusRing}`}>
           Try again
         </button>
       </div>
@@ -117,7 +122,7 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   const zoomed = zoom.s > 1;
   return (
     <>
-      {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-paper fn-breathe" />}
+      {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-frameInk fn-breathe" />}
       <svg aria-hidden width="0" height="0" className="absolute">
         {BRIGHTEN.slice(1).map((b, i) => (
           <filter key={b.state} id={`brighten-${i + 1}`} colorInterpolationFilters="sRGB">
@@ -137,8 +142,8 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         // At 1× a vertical swipe still scrolls the page on a phone.
-        style={{ touchAction: zoomed ? 'none' : 'pan-y' }}
-        className={`absolute inset-0 overflow-hidden ${zoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'}`}
+        style={{ touchAction: video ? undefined : zoomed ? 'none' : 'pan-y' }}
+        className={`absolute inset-0 overflow-hidden ${video ? '' : zoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'}`}
       >
         <div
           data-testid="photo-layer"
@@ -160,8 +165,14 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
             />
           )}
           {big && image && <Original card={card} mediaID={photo.mediaID} aspect={image.w / image.h} />}
+          {video && url && !cantPlay && <Playback card={card} mediaID={photo.mediaID} poster={url} onError={() => setCantPlay(true)} />}
         </div>
       </div>
+      {video && cantPlay && card.own && (
+        <p className="absolute bottom-3 inset-x-3 mx-auto w-fit max-w-full px-4 py-2 rounded-full bg-frame/85 text-center text-[18px] text-frameInk">
+          This video can't play in this browser.
+        </p>
+      )}
       {zoomed && (
         <button
           onClick={() => setZoom(NO_ZOOM, true)}
@@ -171,6 +182,23 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
         </button>
       )}
     </>
+  );
+}
+
+/** The stored video, streamed: preload="metadata" and the gate's Range support mean seeking fetches only what it needs. */
+function Playback({ card, mediaID, poster, onError }: { card: Card; mediaID: string; poster: string; onError: () => void }) {
+  const { url } = useImageUrl(card, mediaID, 'original');
+  if (!url) return null;
+  return (
+    <video
+      src={url}
+      poster={poster}
+      controls
+      playsInline
+      preload="metadata"
+      onError={onError}
+      className="absolute inset-0 w-full h-full object-contain"
+    />
   );
 }
 

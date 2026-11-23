@@ -1,10 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Media } from '@sparcd/bucket';
-import { focusRing, press } from '@sparcd/auth-ui';
+import { focusRing } from '@sparcd/auth-ui';
 import type { Card } from '../data/card';
 import type { PhotoTag } from '../data/tags';
-import { TaggedMark, Thumb } from './Photo';
-import { filterCounts, filtered, gridColumns, tileLabel, type GridFilter } from './view';
+import { PlayBadge, TaggedMark, Thumb } from './Photo';
+import { PhotoIcon, Pill } from './Pill';
+import { filterCounts, filtered, gridColumns, isVideo, tileLabel, type GridFilter } from './view';
 
 const GAP = 12;
 const PAD = 20;
@@ -69,9 +70,8 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
   return (
     <div className="flex-1 min-h-0 flex flex-col" data-testid="grid">
       <div className="shrink-0 flex flex-wrap items-center gap-3 px-5 py-3 border-b border-rule">
-        <button onClick={onClose} className={`shrink-0 h-12 px-4 border border-ink bg-paper text-[20px] text-ink hover:bg-paperHover ${press} ${focusRing}`}>
-          ‹ Back to the photo
-        </button>
+        {/* Where All photos sat over the photo, so it reads as switching the view back, not as leaving the upload. */}
+        <Pill className="shrink-0 border border-rule" onClick={onClose} label="One photo" icon={<PhotoIcon />} />
         <div role="group" aria-label="Show" className="flex-1 min-w-[min(100%,30rem)] grid grid-cols-3 border border-rule divide-x divide-rule">
           {FILTERS.map((f) => (
             <button
@@ -117,10 +117,11 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
                     }}
                     onClick={() => onPick(i)}
                     aria-current={current ? 'true' : undefined}
-                    aria-label={`Photo ${(i + 1).toLocaleString()}${label ? `, ${label}` : ''}`}
+                    aria-label={`${isVideo(p) ? 'Video' : 'Photo'} ${(i + 1).toLocaleString()}${label ? `, ${label}` : ''}`}
                     className={`relative block w-full ${current ? 'outline outline-[4px] outline-offset-2 outline-accent' : ''} ${focusRing}`}
                   >
                     <Thumb card={card} mediaID={p.mediaID} alt="" />
+                    {isVideo(p) && <PlayBadge className="absolute top-1 right-1 w-7 h-7" />}
                     {label && (
                       <>
                         <TaggedMark className="absolute top-1 left-1 w-7 h-7" />

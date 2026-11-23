@@ -83,6 +83,18 @@ export function Thumb({ card, mediaID, alt }: { card: Card; mediaID: string; alt
   );
 }
 
+/** Marks a video's tile, in the corner across from the check mark. */
+export function PlayBadge({ className = '' }: { className?: string }) {
+  return (
+    <span aria-hidden data-testid="play-badge" className={`pointer-events-none inline-flex ${className}`}>
+      <svg viewBox="0 0 32 32" className="w-full h-full">
+        <circle cx="16" cy="16" r="14.5" fill="#172018" fillOpacity="0.75" stroke="white" strokeWidth="2" />
+        <path d="M12.5 9.5v13l10.5-6.5z" fill="white" />
+      </svg>
+    </span>
+  );
+}
+
 /** The old Tagger's "has species" check mark, drawn over a tile's corner. */
 export function TaggedMark({ className = '' }: { className?: string }) {
   return (

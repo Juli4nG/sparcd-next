@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Media } from '@sparcd/bucket';
 import { NOTHING, type PhotoTag } from '../src/data/tags';
-import { BRIGHTEN, MAX_ZOOM, NO_ZOOM, brightenFilter, clampZoom, contained, filterCounts, filtered, gridColumns, nextBrighten, tileLabel, zoomAt } from '../src/tag/view';
+import { BRIGHTEN, MAX_ZOOM, NO_ZOOM, brightenFilter, clampZoom, contained, filterCounts, filtered, gridColumns, kindOf, nextBrighten, tileLabel, zoomAt } from '../src/tag/view';
 
 const box = { w: 800, h: 600 };
 const photo = { w: 800, h: 450 }; // a 16:9 photo in a 4:3 box, letterboxed top and bottom
@@ -96,5 +96,12 @@ describe('grid', () => {
     expect(gridColumns(350)).toBe(3);
     expect(gridColumns(0)).toBe(3);
     expect(gridColumns(1240)).toBe(6);
+  });
+});
+
+describe('kind', () => {
+  it('names a row by its media type', () => {
+    const row = (fileMediatype: string) => ({ fileMediatype }) as Media;
+    expect(['image/jpeg', 'video/mp4', 'video/quicktime'].map((t) => kindOf(row(t)))).toEqual(['photo', 'video', 'video']);
   });
 });

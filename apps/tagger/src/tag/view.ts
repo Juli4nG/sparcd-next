@@ -1,6 +1,11 @@
 import type { Media } from '@sparcd/bucket';
 import { tagState, type PhotoTag } from '../data/tags';
 
+export const isVideo = (m: Media): boolean => m.fileMediatype.startsWith('video/');
+
+/** "photo" or "video", for words about one item; counts of the whole upload still say photos. */
+export const kindOf = (m: Media): 'photo' | 'video' => (isVideo(m) ? 'video' : 'photo');
+
 // Zoom on the big photo. The transform is translate(x, y) scale(s) about the box's centre.
 
 export const MAX_ZOOM = 4;

@@ -7,9 +7,10 @@ import type { Tagging } from '../data/useTagging';
 import { useSpeciesResults } from '../lib/useSpeciesResults';
 import { Dialog, dialogOpen, focusRing, press } from '@sparcd/auth-ui';
 import { BigPhoto } from './BigPhoto';
-import { TaggedMark, Thumb } from './Photo';
+import { PlayBadge, TaggedMark, Thumb } from './Photo';
 import { PhotoGrid } from './PhotoGrid';
-import { BRIGHTEN, nextBrighten, type GridFilter } from './view';
+import { GridIcon, Pill, SunIcon } from './Pill';
+import { BRIGHTEN, isVideo, kindOf, nextBrighten, type GridFilter } from './view';
 import { siteFavorites } from './favorites';
 import './simple.css';
 
@@ -17,7 +18,6 @@ const FAVORITES = 6;
 const STRIP = 9;
 const UNDO_LIMIT = 50;
 const NONE: PhotoTag[] = [];
-const NOTHING_HERE = 'Nothing in this photo';
 const MAX_COUNT = 999;
 /** A new photo takes tags only once it shows, and not sooner than this: a second click meant for the last photo lands on nothing. */
 const SETTLE_MS = 300;
@@ -57,6 +57,9 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   }, [tags]);
 
   const current: Media | undefined = photos[focus];
+  const word = current ? kindOf(current) : 'photo';
+  const Word = word === 'video' ? 'Video' : 'Photo';
+  const nothingHere = `Nothing in this ${word}`;
   const currentTags = (current && tags.get(current.mediaID)) || NONE;
   const untagged = tagState(currentTags) === 'untagged';
   const shown = !!current && loaded === current.mediaID && settled === current.mediaID;
@@ -78,7 +81,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   }, [card, photos, focus]);
 
   const no = (i: number) => (i + 1).toLocaleString();
-  const nameOf = (t: PhotoTag) => (t.observationType === 'blank' ? NOTHING_HERE : (byKey.get(t.key)?.name ?? (t.scientificName || 'Unknown')));
+  const nameOf = (t: PhotoTag) => (t.observationType === 'blank' ? nothingHere : (byKey.get(t.key)?.name ?? (t.scientificName || 'Unknown')));
   const moveTo = (i: number) => {
     setFocus(i);
     setCount(1);
@@ -98,8 +101,8 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
 
   const apply = (tag: PhotoTag) => {
     if (!current) return;
-    const label = tag.observationType === 'blank' ? NOTHING_HERE : `${tag.count > 1 ? `${tag.count} × ` : ''}${nameOf(tag)}`;
-    const after = change([current.mediaID], (list) => addTag(list, tag), `${label} on photo ${no(focus)}`);
+    const label = tag.observationType === 'blank' ? nothingHere : `${tag.count > 1 ? `${tag.count} × ` : ''}${nameOf(tag)}`;
+    const after = change([current.mediaID], (list) => addTag(list, tag), `${label} on ${word} ${no(focus)}`);
     if (!after || !untagged) return;
     for (let k = 1; k < photos.length; k++) {
       const i = (focus + k) % photos.length;
@@ -175,10 +178,10 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
       ) : current ? (
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 min-[900px]:overflow-visible min-[900px]:grid-cols-[minmax(0,1fr)_clamp(440px,34vw,500px)]">
           <section className="min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4 min-[900px]:min-h-0" aria-label="Photo" data-shown={shown}>
-            <div className="relative aspect-[4/3] bg-ink overflow-hidden min-[900px]:aspect-auto min-[900px]:flex-1 min-[900px]:min-h-0">
-              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} brighten={brighten} onShown={() => setLoaded(current.mediaID)} />
-              <OverPhoto
-                side="left"
+            <div className="relative aspect-[4/3] bg-frame overflow-hidden min-[900px]:aspect-auto min-[900px]:flex-1 min-[900px]:min-h-0">
+              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`${Word} ${no(focus)}`} brighten={brighten} onShown={() => setLoaded(current.mediaID)} />
+              <Pill
+                className="absolute top-3 left-3"
                 onClick={() => {
                   setGrid(true);
                   // Back from the grid, the photo counts as shown only once it has loaded again.
@@ -187,12 +190,12 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                 label="All photos"
                 icon={<GridIcon />}
               />
-              <OverPhoto
-                side="right"
+              <Pill
+                className="absolute top-3 right-3"
                 onClick={() => setBrighten(nextBrighten)}
                 label={BRIGHTEN[brighten].label}
                 pressed={brighten > 0}
-                ariaLabel={`Brighten the photo: ${BRIGHTEN[brighten].state}`}
+                ariaLabel={`Brighten the ${word}: ${BRIGHTEN[brighten].state}`}
                 icon={<SunIcon />}
               />
               <NavButton side="left" hidden={focus === 0} onClick={() => go(focus - 1)} />
@@ -200,7 +203,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
             </div>
             <div className="shrink-0 h-12 flex items-center gap-4">
               <span className="shrink-0 text-[20px] text-inkSoft tabular-nums">
-                Photo {no(focus)} of {photos.length.toLocaleString()} <span className="text-inkMute">· {clock(current.timestamp)}</span>
+                {Word} {no(focus)} of {photos.length.toLocaleString()} <span className="text-inkMute">· {clock(current.timestamp)}</span>
               </span>
               <span role="status" className="ml-auto min-w-0 truncate text-[20px] text-ink" data-testid="receipt">
                 {receipt && (
@@ -222,10 +225,10 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
             <Strip card={card} photos={photos} tags={tags} focus={focus} onPick={go} />
           </section>
 
-          <aside className="border-t border-rule px-6 py-5 flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:overflow-y-auto min-[900px]:border-t-0 min-[900px]:border-l" aria-label="What’s in this photo?">
+          <aside className="border-t border-rule px-6 py-5 flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:overflow-y-auto min-[900px]:border-t-0 min-[900px]:border-l" aria-label={`What’s in this ${word}?`}>
             {/* Room for two lines either way, so the thank-you doesn't push the answers down. */}
             <h2 className={`h-[4.75rem] shrink-0 font-display text-[30px] leading-tight font-[600] ${finished ? 'text-ok' : 'text-ink'}`}>
-              {finished ? 'Every photo is tagged. Thank you!' : 'What’s in this photo?'}
+              {finished ? 'Every photo is tagged. Thank you!' : `What’s in this ${word}?`}
             </h2>
 
             {untagged ? (
@@ -246,12 +249,12 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                         inRow
                         value={t.count}
                         label={`How many ${nameOf(t)}`}
-                        onChange={(n) => change([current.mediaID], (list) => setTagCount(list, t.key, n), `${n} × ${nameOf(t)} on photo ${no(focus)}`)}
+                        onChange={(n) => change([current.mediaID], (list) => setTagCount(list, t.key, n), `${n} × ${nameOf(t)} on ${word} ${no(focus)}`)}
                       />
                     )}
                     <button
-                      onClick={() => change([current.mediaID], (list) => removeTag(list, t.key), `Took ${nameOf(t)} off photo ${no(focus)}`)}
-                      aria-label={`Take ${nameOf(t)} off this photo`}
+                      onClick={() => change([current.mediaID], (list) => removeTag(list, t.key), `Took ${nameOf(t)} off ${word} ${no(focus)}`)}
+                      aria-label={`Take ${nameOf(t)} off this ${word}`}
                       className={`h-14 w-14 shrink-0 grid place-items-center text-[24px] text-inkSoft hover:text-warn hover:bg-paperHover ${focusRing}`}
                     >
                       ✕
@@ -269,7 +272,7 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
                 </BigChoice>
               ))}
               <BigChoice strong on={applied.has(NOTHING.key)} hint={keysUsed ? '0' : null} onClick={() => apply(NOTHING)}>
-                <span className="w-full text-center">{NOTHING_HERE}</span>
+                <span className="w-full text-center">{nothingHere}</span>
               </BigChoice>
               <BigChoice quiet onClick={() => setPicker(true)}>
                 <span className="w-full text-center">Something else…</span>
@@ -330,44 +333,6 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
-/** A pill in a top corner of the photo, clear of the arrows and of what's being zoomed. */
-function OverPhoto({ side, label, icon, pressed, ariaLabel, onClick }: {
-  side: 'left' | 'right';
-  label: string;
-  icon: React.ReactNode;
-  pressed?: boolean;
-  ariaLabel?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={pressed}
-      aria-label={ariaLabel}
-      className={`absolute top-3 ${side === 'left' ? 'left-3' : 'right-3'} h-12 pl-3.5 pr-4 inline-flex items-center gap-2 rounded-full text-[18px] font-[600] shadow ${pressed ? 'bg-ink text-paper hover:opacity-90' : 'bg-paper/85 text-ink hover:bg-paper'} ${press} ${focusRing}`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-const GridIcon = () => (
-  <svg aria-hidden viewBox="0 0 20 20" className="w-5 h-5" fill="currentColor">
-    <rect x="2" y="2" width="7" height="7" />
-    <rect x="11" y="2" width="7" height="7" />
-    <rect x="2" y="11" width="7" height="7" />
-    <rect x="11" y="11" width="7" height="7" />
-  </svg>
-);
-
-const SunIcon = () => (
-  <svg aria-hidden viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <circle cx="10" cy="10" r="3.5" fill="currentColor" />
-    <path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6 16 16M4 16l1.4-1.4M14.6 5.4 16 4" />
-  </svg>
-);
-
 function NavButton({ side, hidden, onClick }: { side: 'left' | 'right'; hidden: boolean; onClick: () => void }) {
   return (
     <button
@@ -401,11 +366,12 @@ function Strip({ card, photos, tags, focus, onPick }: {
             <button
               onClick={() => onPick(i)}
               aria-current={i === focus ? 'true' : undefined}
-              aria-label={`Photo ${i + 1}${done ? ', tagged' : ''}`}
+              aria-label={`${isVideo(p) ? 'Video' : 'Photo'} ${i + 1}${done ? ', tagged' : ''}`}
               className={`relative block w-full ${i === focus ? 'outline outline-[3px] outline-offset-2 outline-accent' : 'opacity-85 hover:opacity-100'} ${focusRing}`}
             >
               <Thumb card={card} mediaID={p.mediaID} alt="" />
               {done && <TaggedMark className="absolute top-1 left-1 w-[26%] aspect-square" />}
+              {isVideo(p) && <PlayBadge className="absolute top-1 right-1 w-[26%] aspect-square" />}
             </button>
           </li>
         );
