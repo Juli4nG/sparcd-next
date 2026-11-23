@@ -129,6 +129,8 @@ export async function createGate(input) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     handle(req, res).catch((err) => {
       // The detail goes to the operator, never to the caller.
+      // The client left and took its upstream request with it.
+      if (err.name === 'AbortError') return res.destroy();
       log('request failed', err);
       if (res.headersSent) return res.destroy();
       if (err.name === 'TimeoutError') {
@@ -200,37 +202,45 @@ export async function createGate(input) {
     const person = people.get(verified.accessKeyId);
     if (person?.status !== 'active') return refuse(403, 'AccessDenied', 'login is not active');
 
-    let body;
-    let bodyHash = EMPTY_SHA256;
-    if (!bodyless) {
-      const account = budget.open(verified.accessKeyId, perKeyCap);
-      res.on('close', () => account.release());
-      const read = await readBody(req, config.maxBodyBytes, account, config.bodyIdleMs);
-      if (read.error === 'too-large') return refuseBody(req, res, 413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
-      if (read.error === 'busy') return refuseBody(req, res, 503, 'SlowDown', 'too much request body in flight');
-      if (read.error === 'idle') return refuseBody(req, res, 408, 'RequestTimeout', 'the request body stalled');
-      if (read.error) return undefined;
-      ({ body, hash: bodyHash } = read);
-    }
-    // The signature covers the declared hash, not the bytes. Checking the
-    // declaration against the body stops a captured PUT being replayed inside
-    // the window with different contents.
-    if (!verified.presigned && bodyHash !== verified.payloadHash) {
-      return refuse(403, 'SignatureDoesNotMatch', 'body does not match x-amz-content-sha256');
-    }
+    // A client that leaves stops the upstream request, which may still be
+    // sending its body; the body's charge is released once that has settled.
+    const left = new AbortController();
+    res.on('close', () => left.abort());
+    let account = null;
+    try {
+      let body;
+      let bodyHash = EMPTY_SHA256;
+      if (!bodyless) {
+        account = budget.open(verified.accessKeyId, perKeyCap);
+        const read = await readBody(req, config.maxBodyBytes, account, config.bodyIdleMs);
+        if (read.error === 'too-large') return refuseBody(req, res, 413, 'EntityTooLarge', 'request body exceeds MAX_BODY_BYTES');
+        if (read.error === 'busy') return refuseBody(req, res, 503, 'SlowDown', 'too much request body in flight');
+        if (read.error === 'idle') return refuseBody(req, res, 408, 'RequestTimeout', 'the request body stalled');
+        if (read.error) return undefined;
+        ({ body, hash: bodyHash } = read);
+      }
+      // The signature covers the declared hash, not the bytes. Checking the
+      // declaration against the body stops a captured PUT being replayed inside
+      // the window with different contents.
+      if (!verified.presigned && bodyHash !== verified.payloadHash) {
+        return refuse(403, 'SignatureDoesNotMatch', 'body does not match x-amz-content-sha256');
+      }
 
-    if (isApi) {
-      return respondJson(res, 200, {
-        name: person.name,
-        code: person.code,
-        bucket: ownBucket(person.code),
-        settingsBucket: config.settingsBucket,
-      });
+      if (isApi) {
+        return respondJson(res, 200, {
+          name: person.name,
+          code: person.code,
+          bucket: ownBucket(person.code),
+          settingsBucket: config.settingsBucket,
+        });
+      }
+      return await handleS3({ req, res, url, headers, body, person, verified, signal: left.signal });
+    } finally {
+      account?.release();
     }
-    return handleS3({ req, res, url, headers, body, person, verified });
   }
 
-  async function handleS3({ req, res, url, headers, body, person, verified }) {
+  async function handleS3({ req, res, url, headers, body, person, verified, signal }) {
     const bucket = bucketFromPath(url.pathname);
     const key = keyFromPath(url.pathname);
     const denied = (reason) => {
@@ -245,6 +255,13 @@ export async function createGate(input) {
       if (!name.startsWith('x-amz-')) continue;
       if (AMZ_ACCEPT_AND_DROP.has(name) || forwardableAmz(name)) continue;
       return denied(`header not accepted: ${name}`);
+    }
+    // RGW compares bare tags, so their quotes come off on the way up; a quoted
+    // "*" would arrive as the wildcard, a different condition from the one signed.
+    for (const name of ['if-match', 'if-none-match']) {
+      if (/(^|,)\s*(W\/)?"\*"\s*(,|$)/.test(headers.get(name) ?? '')) {
+        return respondXml(res, 400, 'InvalidArgument', `${name} cannot carry the entity tag "*"`);
+      }
     }
     if (verified.presigned && verified.expires > presignLimit(key)) {
       return denied(`X-Amz-Expires exceeds ${presignLimit(key)} s for this key`);
@@ -284,7 +301,7 @@ export async function createGate(input) {
       out.set(name, name === 'if-match' ? normalizeIfMatch(value) : value);
     }
     if (body) out.set('x-amz-content-sha256', verified.payloadHash);
-    const upstreamRes = await upstream.send(target, { method: req.method, headers: out, body });
+    const upstreamRes = await upstream.send(target, { method: req.method, headers: out, body, signal });
 
     if (!upstreamRes.ok && upstreamRes.status !== 304) return respondUpstreamError(res, upstreamRes);
 
@@ -414,12 +431,13 @@ function respondJson(res, status, value) {
 }
 
 // Buffered whole and hashed as it arrives, because the hash must match before
-// anything goes upstream. The buffer then goes with a Content-Length, never
+// anything goes upstream. The buffers then go with a Content-Length, never
 // chunked, which RGW rejects.
 function readBody(req, limit, account, idleMs) {
   return new Promise((resolve) => {
     // Node's parser delivers at most Content-Length bytes, so a declared body
-    // fills one buffer, with no second copy of it at the end. A large
+    // fills one buffer; an undeclared one keeps the chunks as they came.
+    // Neither is copied again at the end. A large
     // allocUnsafe buffer is committed page by page as bytes land, so memory
     // still follows the budget, which charges what arrives.
     const declared = req.headers['content-length'];
@@ -443,6 +461,8 @@ function readBody(req, limit, account, idleMs) {
     };
     arm();
     req.on('data', (chunk) => {
+      // Past a refusal nothing more is charged: the charge is released already.
+      if (settled) return;
       arm();
       size += chunk.length;
       if (size > limit) { done({ error: 'too-large' }); return; }
@@ -452,7 +472,7 @@ function readBody(req, limit, account, idleMs) {
       else chunks.push(chunk);
     });
     req.on('end', () => done({
-      body: whole ? whole.subarray(0, size) : Buffer.concat(chunks),
+      body: whole ? [whole.subarray(0, size)] : chunks,
       hash: hash.digest('hex'),
     }));
     req.on('aborted', () => done({ error: 'aborted' }));

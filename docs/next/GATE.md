@@ -89,6 +89,9 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   - A PutObject under `Media/` must carry `If-None-Match: *`, and is refused
     without it.
   - The client gets the upstream's 412 back when the file already exists.
+- **Entity tags:** `If-Match` goes upstream without its quotes, which is how
+  RGW compares tags. An `If-Match` or `If-None-Match` carrying the quoted tag
+  `"*"` is a 400, since without quotes it would become the wildcard.
 - **Refused for everyone:**
   - DeleteObject, so nothing is ever deleted through the gate.
   - CopyObject and ListBuckets.
@@ -126,6 +129,7 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   `Content-Security-Policy: sandbox; default-src 'none'`.
 - Upstream errors use S3 XML with a gate message. Upstream fetches have a
   60-second deadline and return 504 if it expires before the response starts.
+  A client that disconnects stops its upstream request.
 - A paused person gets 403 on everything.
 
 ## Encryption at rest

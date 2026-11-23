@@ -46,12 +46,29 @@ test('object requests carry a key made for their bucket; listings carry none; pl
   const options = { endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey };
   const up = makeUpstream(options);
   await up.send(up.url('sparcd-next-ana', 'Media/x/thumb.jpg'));
-  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: Buffer.from('x') });
+  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: [Buffer.from('x')] });
   await up.put('sparcd-next-settings', 'lab.json', '{}');
   await up.listPage('sparcd-next-ana', { prefix: 'Media/' });
   assert.deepEqual(seen.map(([, , m]) => m), [md5('sparcd-next-ana'), md5('sparcd-next-ana'), md5('sparcd-next-settings'), null]);
   assert.notEqual(md5('sparcd-next-ana'), md5('sparcd-next-ben'));
   assert.throws(() => makeUpstream({ ...options, endpoint: 'http://objects.example.org' }), /https/);
+});
+
+test('a body goes upstream as views into the buffers it arrived in, under their summed length', async (t) => {
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (req) => {
+    sent = { length: req.headers.get('content-length'), parts: [] };
+    for await (const part of req.body) sent.parts.push(part);
+    return new Response('');
+  });
+  const up = makeUpstream({ endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey: null });
+  const body = [Buffer.alloc(3, 1), Buffer.alloc(0), Buffer.alloc((1 << 20) + 5, 2)];
+  await up.send(up.url('sparcd-next-ana', 'a.bin'), { method: 'PUT', body, headers: { 'x-amz-content-sha256': 'f'.repeat(64) } });
+  assert.equal(sent.length, String(3 + (1 << 20) + 5));
+  assert.deepEqual(
+    sent.parts.map((p) => [body.findIndex((b) => b.buffer === p.buffer), p.byteOffset, p.length]),
+    [[0, body[0].byteOffset, 3], [2, body[2].byteOffset, 1 << 20], [2, body[2].byteOffset + (1 << 20), 5]],
+  );
 });
 
 test('gate HTTP requests and responses', async (t) => {
@@ -60,8 +77,13 @@ test('gate HTTP requests and responses', async (t) => {
   const VIDEO = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
   const puts = [];
   const putHeaders = [];
+  let onSlowPut = () => {};
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'PUT' && url.pathname.endsWith('/slow')) {
+      req.resume();
+      return onSlowPut(res);
+    }
     if (req.method === 'PUT') {
       putHeaders.push(req.headers);
       const chunks = [];
@@ -111,7 +133,7 @@ test('gate HTTP requests and responses', async (t) => {
     if (presigned) target.searchParams.set('X-Amz-Expires', '7200');
     if (sign) {
       const req = presigned ? await aws.sign(target, { method, aws: { signQuery: true } })
-        : await signed(target, { method, body: signBody ? body : undefined });
+        : await signed(target, { method, body: signBody ? body : undefined, headers });
       target.search = new URL(req.url).search;
       headers = { ...Object.fromEntries(req.headers), ...headers };
     }
@@ -288,30 +310,58 @@ test('gate HTTP requests and responses', async (t) => {
     }
   });
 
-  await t.test('upstream requests time out with S3 XML', { timeout: 10_000 }, async (subtest) => {
-    // undici's Request follows its signal through a weak reference, so after a
-    // garbage collection the abort can be lost and the test waits for Node's
-    // 300 s request timeout. Holding every request and its controller keeps the
-    // abort deterministic.
-    const held = [];
+  await t.test('a quoted "*" in If-Match or If-None-Match is refused; a plain tag goes up bare', async () => {
+    puts.length = 0;
+    for (const headers of [{ 'if-match': '"*"' }, { 'if-none-match': 'W/"*"' }, { 'if-match': '"abc", "*"' }]) {
+      const res = await call(`${bucket}/body.bin`, { method: 'PUT', headers });
+      assert.equal(res.status, 400);
+      assert.match(res.text, /<Code>InvalidArgument<\/Code>/);
+    }
+    assert.deepEqual(puts, []);
+    putHeaders.length = 0;
+    assert.equal((await call(`${bucket}/body.bin`, { method: 'PUT', headers: { 'if-match': '"abc"' } })).status, 200);
+    assert.equal(putHeaders[0]['if-match'], 'abc');
+  });
+
+  await t.test('a client that leaves stops the upstream PUT, which held its share of the buffer until then', async () => {
+    const small = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, maxBodyBytes: 100, maxBufferedBytes: 100,
+    });
+    try {
+      const to = await small.listen(0);
+      const body = 'x'.repeat(80);
+      const req = await signed(new URL(`http://gate.test${bucket}/slow`), { method: 'PUT', body });
+      const head = [`PUT ${bucket}/slow HTTP/1.1`, 'host: gate.test', `content-length: ${body.length}`,
+        ...[...req.headers].map(([k, v]) => `${k}: ${v}`), '', ''].join('\r\n');
+      const arrived = new Promise((resolve) => { onSlowPut = resolve; });
+      const socket = connect(to, '127.0.0.1', () => socket.write(head + body));
+      const upstreamRes = await arrived;
+      // Still in flight upstream, so its 80 bytes still count.
+      const second = { method: 'PUT', body: 'y'.repeat(80), signBody: true, to };
+      assert.equal((await call(`${bucket}/body.bin`, second)).status, 503);
+      const stopped = new Promise((resolve) => { upstreamRes.on('close', resolve); });
+      socket.destroy();
+      await stopped;
+      assert.equal((await call(`${bucket}/body.bin`, second)).status, 200);
+    } finally {
+      onSlowPut = () => {};
+      await small.close();
+    }
+  });
+
+  await t.test('stalled upstream requests time out with S3 XML, after a garbage collection', { timeout: 10_000 }, async (subtest) => {
+    // undici's Request follows its signal through a weak reference, and the
+    // timer holds a timeout signal weakly: only the gate holding both keeps
+    // the deadline once a collection runs (with --expose-gc).
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
     subtest.mock.method(AbortSignal, 'timeout', (ms) => {
       assert.equal(ms, 60_000);
-      const controller = new AbortController();
-      held.push(controller);
-      // With --expose-gc, collect first: the worst case for a lost abort.
-      setTimeout(() => {
-        globalThis.gc?.();
-        controller.abort(new DOMException('timed out', 'TimeoutError'));
-      }, 100);
-      return controller.signal;
+      setTimeout(() => globalThis.gc?.(), 100);
+      return timeout(300);
     });
-    const realFetch = globalThis.fetch;
-    subtest.mock.method(globalThis, 'fetch', (input, init) => {
-      held.push(input);
-      return realFetch(input, init);
-    });
-    for (const key of ['slow', 'slow-error']) {
-      const res = await call(`${bucket}/${key}`);
+    for (const [key, method] of [['slow', 'GET'], ['slow-error', 'GET'], ['slow', 'PUT']]) {
+      const res = await call(`${bucket}/${key}`, { method, body: method === 'PUT' ? 'x' : undefined, signBody: true });
       assert.equal(res.status, 504);
       assert.match(res.text, /<Error><Code>GatewayTimeout<\/Code><Message>/);
     }
