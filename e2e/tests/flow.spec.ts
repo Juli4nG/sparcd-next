@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, copyFileSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { AwsClient } from 'aws4fetch';
@@ -10,19 +10,21 @@ import { person } from './person';
 test.describe.configure({ mode: 'serial' });
 
 const SITE = { id: 'owl-canyon', name: 'Owl Canyon' };
+/** Species pictures come from an outside host; the letter stands in for them. */
+const SPECIES_PICTURES = /^https:\/\/arizona\.box\.com\//;
 /** With uploads slowed to 2.5 s a file and six photos in flight, 24 photos take about 10 s: time enough for a time left. */
 const PHOTOS = 24;
 
 let page: Page;
 let folder: Folder;
 let withVideos: Folder;
+let bigVideo: Folder;
 let cardHref: string;
 let videoCardHref: string;
 
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage();
-  // Species pictures come from an outside host; the letter stands in for them.
-  await page.context().route(/^https:\/\/arizona\.box\.com\//, (route) => route.abort());
+  await page.context().route(SPECIES_PICTURES, (route) => route.abort());
   folder = await makeFolder(page, SITE.id, PHOTOS, 10);
   withVideos = await makeFolder(page, SITE.id, 2, 20);
   addVideos(withVideos);
@@ -30,7 +32,7 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
   await page?.close();
-  for (const f of [folder, withVideos]) if (f) rmSync(dirname(f.dir), { recursive: true, force: true });
+  for (const f of [folder, withVideos, bigVideo]) if (f) rmSync(dirname(f.dir), { recursive: true, force: true });
 });
 
 const signIn = async () => {
@@ -376,6 +378,32 @@ test('old /simple/ and /classic/ paths go to the new apps', async () => {
   await expect(page).toHaveURL('/upload/');
   await page.goto('/classic/tag/');
   await expect(page).toHaveURL('/tag/');
+});
+
+test('a 100 MB video uploads while the page keeps answering', async () => {
+  // A playable video with 100 MiB of media data after it, made here rather than committed.
+  bigVideo = await makeFolder(page, SITE.id, 0, 30);
+  const file = join(bigVideo.dir, 'VID_0100.MP4');
+  copyFileSync(join(import.meta.dirname, '..', 'fixtures', VIDEOS[0]), file);
+  const mdat = Buffer.alloc(100 * 2 ** 20);
+  mdat.writeUInt32BE(mdat.length);
+  mdat.write('mdat', 4);
+  appendFileSync(file, mdat);
+  await page.addInitScript(() => {
+    const w = window as unknown as { longest: number };
+    w.longest = 0;
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) w.longest = Math.max(w.longest, e.duration);
+    }).observe({ type: 'longtask', buffered: true });
+  });
+  // Playwright reads every request's body into one string while any route is on, and 100 MB overflows it.
+  await page.context().unrouteAll({ behavior: 'wait' });
+  await chooseFolder(bigVideo, '1 video found');
+  await answerQuestions(bigVideo);
+  await expect(page.getByTestId('saved')).toHaveText(/^All 1 video/, { timeout: 30_000 });
+  await page.context().route(SPECIES_PICTURES, (route) => route.abort());
+  // Uploading the video as bytes held the main thread for about 5 s here, and minutes at 200 MB.
+  expect(await page.evaluate(() => (window as unknown as { longest: number }).longest)).toBeLessThan(1000);
 });
 
 test('signs out, in every open tab', async () => {
