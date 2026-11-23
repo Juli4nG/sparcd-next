@@ -312,7 +312,7 @@ test('gate HTTP requests and responses', async (t) => {
 
   await t.test('a quoted "*" in If-Match or If-None-Match is refused; a plain tag goes up bare', async () => {
     puts.length = 0;
-    for (const headers of [{ 'if-match': '"*"' }, { 'if-none-match': 'W/"*"' }, { 'if-match': '"abc", "*"' }]) {
+    for (const headers of [{ 'if-match': '"*"' }, { 'if-none-match': 'W/"*"' }, { 'if-match': '"abc", "*"' }, { 'if-match': '" * "' }, { 'if-none-match': 'W/" *"' }]) {
       const res = await call(`${bucket}/body.bin`, { method: 'PUT', headers });
       assert.equal(res.status, 400);
       assert.match(res.text, /<Code>InvalidArgument<\/Code>/);

@@ -259,7 +259,8 @@ export async function createGate(input) {
     // RGW compares bare tags, so their quotes come off on the way up; a quoted
     // "*" would arrive as the wildcard, a different condition from the one signed.
     for (const name of ['if-match', 'if-none-match']) {
-      if (/(^|,)\s*(W\/)?"\*"\s*(,|$)/.test(headers.get(name) ?? '')) {
+      const tags = (headers.get(name) ?? '').split(',').map((tag) => tag.trim());
+      if (tags.some((tag) => tag !== '*' && normalizeIfMatch(tag).trim() === '*')) {
         return respondXml(res, 400, 'InvalidArgument', `${name} cannot carry the entity tag "*"`);
       }
     }
