@@ -1,6 +1,19 @@
+import { isVideo } from './scan';
+
 export const number = (n: number) => n.toLocaleString('en-US');
 
 export const count = (n: number, noun: string) => `${number(n)} ${noun}${n === 1 ? '' : 's'}`;
+
+export type Tally = { photos: number; videos: number };
+
+export const tally = (names: string[]): Tally => {
+  const videos = names.filter(isVideo).length;
+  return { photos: names.length - videos, videos };
+};
+
+/** "3 photos", "2 videos", or "3 photos and 2 videos". */
+export const files = ({ photos, videos }: Tally): string =>
+  !videos ? count(photos, 'photo') : !photos ? count(videos, 'video') : `${count(photos, 'photo')} and ${count(videos, 'video')}`;
 
 export function timeLeft(ms: number): string {
   const minutes = Math.round(ms / 60_000);

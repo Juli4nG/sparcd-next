@@ -10,13 +10,13 @@ const dep = (id: string, end: string, groups = ''): Deployment => ({
   deploymentEnd: end,
   deploymentGroups: groups,
 });
-const media = (mediaID: string, deploymentID: string): Media => ({
+const media = (mediaID: string, deploymentID: string, fileMediatype = 'image/jpeg'): Media => ({
   mediaID,
   deploymentID,
   timestamp: '2026-11-01T06:00:00-07:00',
   filePath: `Media/${mediaID}/x.jpg`,
   filePublic: 'true',
-  fileMediatype: 'image/jpeg',
+  fileMediatype,
 });
 const obs = (n: number, mediaID: string, deploymentID: string): Observation => ({
   observationID: `${deploymentID}-${n}`,
@@ -77,20 +77,20 @@ describe('readUploads', () => {
     expect(reads).toHaveLength(3);
   });
 
-  it('counts each upload\'s photos, and a photo with any observation row is tagged once', async () => {
+  it('counts each upload\'s photos and videos, and a file with any observation row is tagged once', async () => {
     const { bucket, files } = fakeBucket();
     const { counts } = readUploads(bucket);
     files['deployments.csv'](serializeTable('deployments', [old, mid, newest]));
     files['media.csv'](
-      serializeTable('media', [media('m1', old.deploymentID), media('m2', old.deploymentID), media('m3', old.deploymentID), media('m4', mid.deploymentID), media('m5', 'gone_2026-01-01')]),
+      serializeTable('media', [media('m1', old.deploymentID), media('m2', old.deploymentID), media('m3', old.deploymentID), media('m4', mid.deploymentID, 'video/mp4'), media('m5', 'gone_2026-01-01')]),
     );
     files['observations.csv'](
       serializeTable('observations', [obs(1, 'm1', old.deploymentID), obs(2, 'm1', old.deploymentID), obs(1, 'm2', old.deploymentID), obs(1, 'm9', 'gone_2026-01-01')]),
     );
     expect([...(await counts)]).toEqual([
-      ['c_2026-11-17', { photos: 0, tagged: 0 }],
-      ['b_2026-11-10', { photos: 1, tagged: 0 }],
-      ['a_2026-11-01', { photos: 3, tagged: 2 }],
+      ['c_2026-11-17', { files: 0, videos: 0, tagged: 0 }],
+      ['b_2026-11-10', { files: 1, videos: 1, tagged: 0 }],
+      ['a_2026-11-01', { files: 3, videos: 0, tagged: 2 }],
     ]);
   });
 

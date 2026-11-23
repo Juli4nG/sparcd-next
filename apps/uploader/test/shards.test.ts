@@ -10,6 +10,7 @@ const EXTRA = [8443, 8444, 8445, 8446, 8447, 8448, 8449];
 const session = { bucket: { name: 'sparcd-next-ana' } } as unknown as Session;
 const bytes = new Uint8Array([1, 2, 3]);
 const SHA = 'a'.repeat(64);
+const JPEG = 'image/jpeg';
 
 type Call = { method: string; host: string; path: string; headers: Headers };
 type Answer = number | 'network';
@@ -68,7 +69,7 @@ describe('openShards probing', () => {
     });
     const shards = await openShards(session);
     expect(shards.live()).toBe(5);
-    for (let i = 0; i < 10; i++) await shards.put(`Media/${i}/view.jpg`, bytes, SHA);
+    for (let i = 0; i < 10; i++) await shards.put(`Media/${i}/view.jpg`, bytes, SHA, JPEG);
     const used = new Set(puts().map((c) => c.host));
     expect([...used].sort()).toEqual([origin(), origin(8446), origin(8447), origin(8448), origin(8449)].sort());
   });
@@ -77,8 +78,8 @@ describe('openShards probing', () => {
     page(onlyExtra([]));
     const shards = await openShards(session);
     expect(shards.live()).toBe(1);
-    await shards.put('Media/a/view.jpg', bytes, SHA);
-    await shards.put('Media/b/view.jpg', bytes, SHA);
+    await shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
+    await shards.put('Media/b/view.jpg', bytes, SHA, JPEG);
     expect(puts().map((c) => c.host)).toEqual([origin(), origin()]);
   });
 });
@@ -87,23 +88,24 @@ describe('openShards put', () => {
   it('spreads photos round-robin over the live endpoints, 443 first', async () => {
     page();
     const shards = await openShards(session);
-    for (let i = 0; i < 16; i++) await shards.put(`Media/${i}/view.jpg`, bytes, SHA);
+    for (let i = 0; i < 16; i++) await shards.put(`Media/${i}/view.jpg`, bytes, SHA, JPEG);
     const order = [origin(), ...EXTRA.map((p) => origin(p))];
     expect(puts().map((c) => c.host)).toEqual([...order, ...order]);
   });
 
-  it('signs each request for its own host and sends the bucket path, the sha and the write-once header', async () => {
+  it('signs each request for its own host and sends the bucket path, the sha, the content type and the write-once header', async () => {
     page();
     const shards = await openShards(session);
-    await shards.put('Media/ab c/IMG 1.JPG', bytes, SHA);
-    await shards.put('Media/ab c/IMG 1.JPG', bytes, SHA);
+    await shards.put('Media/ab c/IMG 1.JPG', bytes, SHA, JPEG);
+    await shards.put('Media/ab c/VID 1.MP4', bytes, SHA, 'video/mp4');
     const [first, second] = puts();
     expect(first.path).toBe('/sparcd-next-ana/Media/ab%20c/IMG%201.JPG');
     expect(second.host).toBe(origin(8443));
+    expect(first.headers.get('content-type')).toBe('image/jpeg');
+    expect(second.headers.get('content-type')).toBe('video/mp4');
     for (const c of [first, second]) {
       expect(c.headers.get('x-amz-content-sha256')).toBe(SHA);
       expect(c.headers.get('if-none-match')).toBe('*');
-      expect(c.headers.get('content-type')).toBe('image/jpeg');
       expect(c.headers.get('authorization')).toContain('Credential=ana/');
     }
     expect(first.headers.get('authorization')).not.toBe(second.headers.get('authorization'));
@@ -115,9 +117,9 @@ describe('openShards put', () => {
       page(onlyExtra([8443], (c) => (c.host === origin(8443) ? failure : 200)));
       const shards = await openShards(session);
       expect(shards.live()).toBe(2);
-      await shards.put('Media/a/view.jpg', bytes, SHA);
-      await shards.put('Media/b/view.jpg', bytes, SHA);
-      await shards.put('Media/c/view.jpg', bytes, SHA);
+      await shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
+      await shards.put('Media/b/view.jpg', bytes, SHA, JPEG);
+      await shards.put('Media/c/view.jpg', bytes, SHA, JPEG);
       expect(puts().map((c) => [c.path.split('/')[3], c.host])).toEqual([
         ['a', origin()],
         ['b', origin(8443)],
@@ -131,8 +133,8 @@ describe('openShards put', () => {
   it('treats a 412, the photo already being stored, as stored, on any endpoint, with no retry', async () => {
     page(onlyExtra([8443], () => 412));
     const shards = await openShards(session);
-    await shards.put('Media/a/view.jpg', bytes, SHA);
-    await shards.put('Media/a/view.jpg', bytes, SHA);
+    await shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
+    await shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
     expect(puts().map((c) => c.host)).toEqual([origin(), origin(8443)]);
     expect(shards.live()).toBe(2);
   });
@@ -140,17 +142,17 @@ describe('openShards put', () => {
   it('throws on a 403 from 443 at once: the login is the problem, not the endpoint', async () => {
     page(onlyExtra([], () => 403));
     const shards = await openShards(session);
-    await expect(shards.put('Media/a/view.jpg', bytes, SHA)).rejects.toMatchObject({ name: 'S3Error', status: 403 });
+    await expect(shards.put('Media/a/view.jpg', bytes, SHA, JPEG)).rejects.toMatchObject({ name: 'S3Error', status: 403 });
     expect(puts()).toHaveLength(1);
   });
 
   it('throws on a 413 from 443 or from an extra port, and keeps the extra port', async () => {
     page(onlyExtra([8443], () => 413));
     const shards = await openShards(session);
-    const primary = shards.put('Media/a/view.jpg', bytes, SHA);
+    const primary = shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
     await expect(primary).rejects.toBeInstanceOf(S3Error);
     await expect(primary).rejects.toMatchObject({ status: 413 });
-    await expect(shards.put('Media/b/view.jpg', bytes, SHA)).rejects.toMatchObject({ status: 413 });
+    await expect(shards.put('Media/b/view.jpg', bytes, SHA, JPEG)).rejects.toMatchObject({ status: 413 });
     expect(puts().map((c) => c.host)).toEqual([origin(), origin(8443)]);
     expect(shards.live()).toBe(2);
   });
@@ -162,21 +164,21 @@ describe('openShards put', () => {
       const answers: Answer[] = [503, 429, 'network', 200];
       page(onlyExtra([], () => answers.shift()!));
       const shards = await openShards(session);
-      await shards.put('Media/a/view.jpg', bytes, SHA);
+      await shards.put('Media/a/view.jpg', bytes, SHA, JPEG);
       expect(puts()).toHaveLength(4);
     });
 
     it('gives up after five attempts with the last status', async () => {
       page(onlyExtra([], () => 503));
       const shards = await openShards(session);
-      await expect(shards.put('Media/a/view.jpg', bytes, SHA)).rejects.toMatchObject({ name: 'S3Error', status: 503 });
+      await expect(shards.put('Media/a/view.jpg', bytes, SHA, JPEG)).rejects.toMatchObject({ name: 'S3Error', status: 503 });
       expect(puts()).toHaveLength(5);
     });
 
     it('gives up after five network errors with that error', async () => {
       page(onlyExtra([], () => 'network'));
       const shards = await openShards(session);
-      await expect(shards.put('Media/a/view.jpg', bytes, SHA)).rejects.toBeInstanceOf(TypeError);
+      await expect(shards.put('Media/a/view.jpg', bytes, SHA, JPEG)).rejects.toBeInstanceOf(TypeError);
       expect(puts()).toHaveLength(5);
     });
   });
@@ -188,7 +190,7 @@ describe('openShards without a gate', () => {
     config.gate = false;
     const putObject = vi.fn(async () => 'stored' as const);
     const shards = await openShards({ bucket: { name: 'sparcd-next-ana', putObject } } as unknown as Session);
-    await shards.put('Media/x/view.jpg', bytes, SHA);
+    await shards.put('Media/x/view.jpg', bytes, SHA, JPEG);
     expect(shards.live()).toBe(1);
     expect(putObject).toHaveBeenCalledWith('Media/x/view.jpg', bytes, { contentType: 'image/jpeg', sha256: SHA });
     expect(calls).toEqual([]);

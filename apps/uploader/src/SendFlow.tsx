@@ -6,13 +6,16 @@ import { scanDrop, scanFileList, type CardFile } from './send/scan';
 import { PhotoError, sendCard, type Details, type Outcome, type Progress } from './send/send';
 import { daysAgo, folderOf, guessFromFolder } from './send/folder';
 import { newPaceMemo, paceTick, type PaceMemo } from './send/pace';
+import { files, tally } from './send/words';
 import type { ReadResult } from './workers/photo.worker';
 
 type Step = 'card' | 'site' | 'date' | 'notes' | 'send';
 
 const longDay = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
-const photos = (n: number) => `${n.toLocaleString()} photo${n === 1 ? '' : 's'}`;
+/** "24 photos", or "22 photos and 2 videos" for a folder with videos. */
+const counted = (names: string[]) => files(tally(names));
+const namesOf = (card: CardFile[]) => card.map((c) => c.file.name);
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 type Deferred = { promise: Promise<Details>; resolve: (d: Details) => void };
@@ -84,7 +87,7 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
         <DatePicker date={date} guess={guessDate} onPick={(d) => (setDate(d), setStep('notes'))} />
       </Screen>
     );
-  const line = cardLine({ range: rangeOf(site!.deploymentGroups), name: site!.locationName, id: site!.locationID, photos: card.length, date });
+  const line = cardLine({ range: rangeOf(site!.deploymentGroups), name: site!.locationName, id: site!.locationID, count: counted(namesOf(card)), date });
   if (step === 'notes')
     return (
       <Screen onBack={() => setStep('date')} question="Anything to add?" folder={folder} bar={bar}>
@@ -113,7 +116,7 @@ export function SendFlow({ session, onSending }: { session: Session; onSending: 
         </div>
       </Screen>
     );
-  if (upload.outcome) return <Done outcome={upload.outcome} line={line} />;
+  if (upload.outcome) return <Done outcome={upload.outcome} line={line} card={card} />;
   return (
     <Screen question="Uploading your photos" folder={folder}>
       <BigProgress upload={upload} card={card} line={line} />
@@ -271,7 +274,7 @@ function CardPicker({ card, onCard, onNext }: { card: CardFile[]; onCard: (c: Ca
         ) : found ? (
           <>
             <p className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="found">
-              {photos(card.length)} found
+              {counted(namesOf(card))} found
             </p>
             {folderOf(card) && (
               <p className="-mt-3 text-[20px] text-inkSoft">
@@ -476,7 +479,7 @@ function UploadBar({ upload, card }: { upload: Upload; card: CardFile[] }) {
         {!upload.online
           ? 'No internet. Uploading will carry on when it’s back.'
           : c.waiting
-            ? `All ${photos(c.total)} uploaded. Answer the questions to finish.`
+            ? `All ${counted(namesOf(card))} uploaded. Answer the questions to finish.`
             : c.uploading
               ? [`${c.done.toLocaleString()} of ${c.total.toLocaleString()} uploaded`, speed, left].filter(Boolean).join(' · ')
               : 'Getting the photos ready…'}
@@ -524,8 +527,10 @@ function BigProgress({ upload, card, line }: { upload: Upload; card: CardFile[];
   );
 }
 
-function Done({ outcome, line }: { outcome: Outcome; line: string }) {
-  const saved = outcome.total - outcome.leftOut.length;
+function Done({ outcome, line, card }: { outcome: Outcome; line: string; card: CardFile[] }) {
+  const all = tally(namesOf(card));
+  const out = tally([...outcome.leftOut, ...outcome.tooBig]);
+  const saved = { photos: all.photos - out.photos, videos: all.videos - out.videos };
   return (
     <main className="h-full overflow-y-auto">
       <div className="max-w-[760px] mx-auto px-6 pt-[72px] pb-10 flex flex-col items-start gap-6">
@@ -533,12 +538,15 @@ function Done({ outcome, line }: { outcome: Outcome; line: string }) {
           ✓
         </p>
         <h1 className="font-display text-[44px] leading-tight font-[600] text-ink" data-testid="saved">
-          {outcome.leftOut.length ? `${photos(saved)} are uploaded` : `All ${photos(outcome.total)} are uploaded`}
+          {out.photos + out.videos ? `${files(saved)} are uploaded` : `All ${files(all)} are uploaded`}
         </h1>
         <p className="-mt-2 text-[22px] text-inkSoft">{line}</p>
-        {outcome.alreadySaved > 0 && <p className="text-[22px] text-inkSoft">{photos(outcome.alreadySaved)} were already uploaded before.</p>}
-        {outcome.leftOut.length > 0 && (
-          <p className="text-[22px] text-inkSoft">{photos(outcome.leftOut.length)} couldn’t be read, so they were left out.</p>
+        {outcome.alreadySaved.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.alreadySaved)} were already uploaded before.</p>}
+        {outcome.leftOut.length > 0 && <p className="text-[22px] text-inkSoft">{counted(outcome.leftOut)} couldn’t be read, so they were left out.</p>}
+        {outcome.tooBig.length > 0 && (
+          <p className="text-[22px] text-inkSoft">
+            {counted(outcome.tooBig)} {outcome.tooBig.length === 1 ? 'is' : 'are'} too big to upload (over 256 MB).
+          </p>
         )}
         <div className="mt-4 flex flex-wrap gap-4">
           {outcome.cardHasPhotos && (

@@ -22,9 +22,9 @@ datapackage.json
 deployments.csv
 media.csv
 observations.csv
-Media/<sha256>/<original file name>   the photo without its camera data (see below)
-Media/<sha256>/thumb.jpg              320 px long side, no EXIF
-Media/<sha256>/view.jpg               1600 px long side, no EXIF
+Media/<sha256>/<original file name>   the photo or video without its camera data (see below)
+Media/<sha256>/thumb.jpg              320 px long side, no EXIF; a still frame for a video
+Media/<sha256>/view.jpg               1600 px long side, no EXIF; a still frame for a video
 shares.json                           share recipes (sharing only)
 shared/<share id>/...                 one generated package per share
 ```
@@ -126,6 +126,10 @@ They're written by the Uploader at upload time, in a worker with
 - Never upscaled.
 - `thumb.jpg`: long side 320 px, quality 0.75.
 - `view.jpg`: long side 1600 px, quality 0.82.
+- For a video, both are a still frame from 1 s in (half way through a shorter
+  video), taken on the main thread with a `<video>` element. When the browser
+  can't decode the video, both are a placeholder: the paper colour with a play
+  triangle. The video is stored either way.
 
 The Tagger shows `thumb.jpg` in grids and `view.jpg` in the large view. It never
 loads originals in a grid. Shares link to `view.jpg` and `thumb.jpg`, never to
@@ -138,6 +142,14 @@ That drops EXIF (time, GPS, camera serial, maker notes such as temperature),
 XMP and IPTC. The image data is unchanged. What the package needs from the
 camera, the time, is read first and kept in `media.csv`; the place is the
 deployment's. So the stored original's SHA-256 is not its `mediaID`.
+
+A stored MP4 or MOV video has every `udta`, `meta` and `uuid` box, at the top
+level and anywhere inside `moov`, turned into a `free` box of the same size
+with a zeroed payload. That drops user data such as the `©xyz` location, maker
+tags and XMP. Box sizes don't change, so chunk offsets stay valid. Its time
+is the `mvhd` creation time, read first. Trail cameras write local wall-clock
+time there, so it takes the lab zone like a photo's `DateTimeOriginal`; zero or
+a time before 2000 counts as missing and is estimated.
 
 Every object is also encrypted at rest by the gate (see `GATE.md`).
 
@@ -189,7 +201,7 @@ The Uploader fills:
 - `filePath`, as `Media/<sha256>/<stored name>`, relative to the package root.
 - `filePublic`, as `true`.
 - `fileName`, the original name.
-- `fileMediatype`, as `image/jpeg`.
+- `fileMediatype`: `image/jpeg`, `video/mp4` or `video/quicktime`.
 - `mediaComments`, only for estimated times.
 
 `filePublic` means "may be shown outside this bucket", for example in a share.
@@ -197,8 +209,9 @@ When the owner records a `human` observation on their own photo, the Tagger sets
 `filePublic` to `false` on that row. It sets it back to `true` once no `human`
 observation remains. Shares include only `filePublic = true` photos.
 
-Tonight the Uploader accepts photos only (`.jpg` and `.jpeg`, any case). Other
-files on the card are ignored.
+The Uploader accepts photos (`.jpg` and `.jpeg`) and videos (`.mp4` and
+`.mov`), in any case. Other files on the card are ignored. A file over 256 MiB
+is left out and the volunteer is told.
 
 ### observations.csv (28 columns)
 
@@ -312,8 +325,9 @@ It's rewritten whenever the CSVs change.
     `observationID`.
 - **Write-once photos.** Every PUT under `Media/` carries `If-None-Match: *`. A
   412 means the file is already stored, and counts as success.
-  - Photos go up as one PUT each, up to the gate's 64 MB body limit, with no
-    multipart.
+  - Photos and videos go up as one PUT each, up to the gate's 256 MiB body
+    limit, with no multipart. The Uploader keeps the files it has in flight
+    to 192 MiB together; one bigger file goes alone.
   - Ceph ignores `If-None-Match` on CompleteMultipartUpload, so multipart
     under `Media/` would allow overwrites. The gate refuses it.
 - **Checkpoints.** The Uploader writes CSV rows every 250 photos and at the end.
@@ -322,7 +336,7 @@ It's rewritten whenever the CSVs change.
   `mediaID` is in `media.csv` is skipped. A photo with all three files stored
   but no row only gets its row. Anything else is sent.
 - **Content types** are always signed: `text/csv; charset=utf-8`,
-  `application/json` and `image/jpeg`.
+  `application/json`, `image/jpeg`, `video/mp4` and `video/quicktime`.
 
 ## Sharing
 

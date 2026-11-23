@@ -11,7 +11,7 @@ import {
   type Site,
 } from '@sparcd/bucket';
 import type { ReadResult } from '../workers/photo.worker';
-import type { CardFile } from './scan';
+import { mediaTypeOf, type CardFile } from './scan';
 
 export type Photo = {
   path: string;
@@ -79,7 +79,7 @@ export const mediaRow = (p: Photo, deploymentID: string): Media => ({
   filePath: keysOf(p).original,
   filePublic: 'true',
   fileName: p.file.name,
-  fileMediatype: 'image/jpeg',
+  fileMediatype: mediaTypeOf(p.file.name),
   mediaComments: p.estimated ? ESTIMATED_TIME_COMMENT : '',
 });
 

@@ -62,3 +62,13 @@ describe('rows', () => {
     expect([d.deploymentStart, d.deploymentEnd]).toEqual(['2026-11-17T10:00:00-07:00', '2026-11-17T10:10:00-07:00']);
   });
 });
+
+describe('mediaRow', () => {
+  it('gives each file its media type by extension', () => {
+    expect(mediaRow(photo('a', 'IMG_1.JPG'), 'x').fileMediatype).toBe('image/jpeg');
+    expect(mediaRow(photo('b', 'VID_1.MP4'), 'x').fileMediatype).toBe('video/mp4');
+    expect(mediaRow(photo('c', 'clip.mov'), 'x').fileMediatype).toBe('video/quicktime');
+    expect(mediaRow(photo('d', 'VID_1.MP4'), 'x').filePath).toBe(`Media/${id('d')}/VID_1.MP4`);
+  });
+});
+

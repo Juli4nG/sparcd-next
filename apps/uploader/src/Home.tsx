@@ -31,7 +31,8 @@ export function Home({ session }: { session: Session }) {
 
 /** Every upload, closed until asked for. The list shows once deployments.csv is in; the counts follow. */
 function Uploads({ uploads, counts, failed }: { uploads: Deployment[] | null; counts: Map<string, Counts> | null; failed: boolean }) {
-  const count = (id: string, n: keyof Counts) => {
+  const videos = !!counts && [...counts.values()].some((c) => c.videos > 0);
+  const count = (id: string, n: 'files' | 'tagged') => {
     const c = counts?.get(id);
     return c ? c[n].toLocaleString() : failed ? '' : '…';
   };
@@ -59,7 +60,7 @@ function Uploads({ uploads, counts, failed }: { uploads: Deployment[] | null; co
           <thead className="text-inkMute text-[15px]">
             <tr className="border-b border-ruleSoft">
               <th className="py-2 pr-4 font-[500]">Upload</th>
-              <th className="py-2 pr-4 font-[500] text-right">Photos</th>
+              <th className="py-2 pr-4 font-[500] text-right">{videos ? 'Photos and videos' : 'Photos'}</th>
               <th className="py-2 font-[500] text-right">Tagged</th>
             </tr>
           </thead>
@@ -71,7 +72,7 @@ function Uploads({ uploads, counts, failed }: { uploads: Deployment[] | null; co
                     {deploymentLine(d)}
                   </a>
                 </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{count(d.deploymentID, 'photos')}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums">{count(d.deploymentID, 'files')}</td>
                 <td className="py-2.5 text-right tabular-nums">{count(d.deploymentID, 'tagged')}</td>
               </tr>
             ))}

@@ -5,7 +5,7 @@ type Job = { req: WorkerRequest; resolve: (v: never) => void; reject: (e: Error)
 
 export type Pool = {
   read: (file: File) => Promise<ReadResult>;
-  derive: (file: File) => Promise<Derived>;
+  derive: (file: File, frame?: ImageBitmap) => Promise<Derived>;
   close: () => void;
 };
 
@@ -21,7 +21,7 @@ export function createPool(size = poolSize()): Pool {
       const worker = idle.pop()!;
       const job = queue.shift()!;
       busy.set(worker, job);
-      worker.postMessage(job.req);
+      worker.postMessage(job.req, job.req.kind === 'derive' && job.req.frame ? [job.req.frame] : []);
     }
   };
 
@@ -52,7 +52,7 @@ export function createPool(size = poolSize()): Pool {
 
   return {
     read: (file) => run<ReadResult>({ kind: 'read', file }),
-    derive: (file) => run<Derived>({ kind: 'derive', file }),
+    derive: (file, frame) => run<Derived>({ kind: 'derive', file, frame }),
     close: () => {
       const stopped = new DOMException('Stopped', 'AbortError');
       for (const job of [...queue.splice(0), ...busy.values()]) job.reject(stopped);

@@ -24,7 +24,7 @@ type Shard = { origin: string; primary: boolean; alive: boolean };
 export type Shards = {
   /** How many endpoints are taking photos right now. */
   live: () => number;
-  put: (key: string, body: Uint8Array<ArrayBuffer>, sha256: string) => Promise<void>;
+  put: (key: string, body: Uint8Array<ArrayBuffer>, sha256: string, contentType: string) => Promise<void>;
 };
 
 export async function openShards(session: Session): Promise<Shards> {
@@ -32,7 +32,7 @@ export async function openShards(session: Session): Promise<Shards> {
   if (!(await loadConfig()).gate)
     return {
       live: () => 1,
-      put: async (key, body, sha256) => void (await session.bucket.putObject(key, body, { contentType: 'image/jpeg', sha256 })),
+      put: async (key, body, sha256, contentType) => void (await session.bucket.putObject(key, body, { contentType, sha256 })),
     };
   const { login, password } = JSON.parse(sessionStorage.getItem(SIGNIN_KEY)!) as { login: string; password: string };
   const aws = new AwsClient({ accessKeyId: login, secretAccessKey: password, service: 's3', region: 'us-east-1', retries: 0 });
@@ -68,7 +68,7 @@ export async function openShards(session: Session): Promise<Shards> {
 
   return {
     live: () => shards.filter((s) => s.alive).length,
-    async put(key, body, sha256) {
+    async put(key, body, sha256, contentType) {
       const path = `${bucketPath}/${key.split('/').map(encode).join('/')}`;
       for (let attempt = 1; ; ) {
         const shard = pick();
@@ -77,7 +77,7 @@ export async function openShards(session: Session): Promise<Shards> {
           const req = await aws.sign(shard.origin + path, {
             method: 'PUT',
             body,
-            headers: { 'content-type': 'image/jpeg', 'if-none-match': '*', 'x-amz-content-sha256': sha256 },
+            headers: { 'content-type': contentType, 'if-none-match': '*', 'x-amz-content-sha256': sha256 },
             aws: { allHeaders: true },
           });
           // A shard that stops answering mid-photo is dropped instead of holding up its lane.

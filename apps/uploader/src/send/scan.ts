@@ -1,11 +1,16 @@
 export type CardFile = { path: string; file: File };
 
-const isPhoto = (name: string) => /\.jpe?g$/i.test(name);
+export const isVideo = (name: string) => /\.(mp4|mov)$/i.test(name);
+const isMedia = (name: string) => /\.jpe?g$/i.test(name) || isVideo(name);
+
+/** The content type of an original, as stored and as `fileMediatype`. */
+export const mediaTypeOf = (name: string) =>
+  /\.mp4$/i.test(name) ? 'video/mp4' : /\.mov$/i.test(name) ? 'video/quicktime' : 'image/jpeg';
 
 export function scanFileList(list: ArrayLike<File>): CardFile[] {
   const out: CardFile[] = [];
   for (const file of Array.from(list)) {
-    if (isPhoto(file.name)) out.push({ path: file.webkitRelativePath || file.name, file });
+    if (isMedia(file.name)) out.push({ path: file.webkitRelativePath || file.name, file });
   }
   return out;
 }
@@ -25,7 +30,7 @@ function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEn
 
 async function walk(entry: FileSystemEntry, out: CardFile[]): Promise<void> {
   if (entry.isFile) {
-    if (!isPhoto(entry.name)) return;
+    if (!isMedia(entry.name)) return;
     const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
     out.push({ path: entry.fullPath.replace(/^\//, ''), file });
   } else if (entry.isDirectory) {

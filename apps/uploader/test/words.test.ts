@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { count, formatBytes, number, timeLeft } from '../src/send/words';
+import { count, files, formatBytes, number, tally, timeLeft } from '../src/send/words';
 
 const MIN = 60_000;
 
@@ -46,5 +46,15 @@ describe('formatBytes', () => {
     expect(formatBytes(5 * 1024 ** 2)).toBe('5.0 MB');
     expect(formatBytes(3 * 1024 ** 3)).toBe('3.0 GB');
     expect(formatBytes(2000 * 1024 ** 3)).toBe('2000 GB');
+  });
+});
+
+describe('files', () => {
+  it('names photos alone as before, and videos when there are any', () => {
+    expect(files(tally(['A.JPG', 'B.jpeg']))).toBe('2 photos');
+    expect(files(tally(['A.JPG']))).toBe('1 photo');
+    expect(files(tally(['A.MP4']))).toBe('1 video');
+    expect(files(tally(['A.JPG', 'B.JPG', 'C.mp4', 'D.MOV']))).toBe('2 photos and 2 videos');
+    expect(files({ photos: 1200, videos: 1 })).toBe('1,200 photos and 1 video');
   });
 });

@@ -13,10 +13,9 @@ export const rangeOf = (groups: string | undefined) =>
     .find((g) => g && !g.startsWith('share:')) ?? '').replace(/^[a-z]+:\s*/i, '');
 
 /** Liz's card description: "Mountain range – Site name – Site ID – photo count – date". */
-export function cardLine(parts: { range: string; name: string; id: string; photos?: number; date: string }): string {
-  const count = parts.photos === undefined ? '' : `${parts.photos.toLocaleString()} photo${parts.photos === 1 ? '' : 's'}`;
-  return [parts.range, parts.name, parts.id, count, longDate(parts.date)].filter(Boolean).join(' – ');
+export function cardLine(parts: { range: string; name: string; id: string; count?: string; date: string }): string {
+  return [parts.range, parts.name, parts.id, parts.count, longDate(parts.date)].filter(Boolean).join(' – ');
 }
 
-export const deploymentLine = (d: Deployment, photos?: number) =>
-  cardLine({ range: rangeOf(d.deploymentGroups), name: d.locationName ?? '', id: d.locationID ?? '', photos, date: d.deploymentID.slice(-10) });
+export const deploymentLine = (d: Deployment) =>
+  cardLine({ range: rangeOf(d.deploymentGroups), name: d.locationName ?? '', id: d.locationID ?? '', date: d.deploymentID.slice(-10) });
