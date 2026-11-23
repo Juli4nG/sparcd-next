@@ -183,6 +183,69 @@ test('a big photo that fails to load offers Try again, which loads it', async ()
   await page.unrouteAll({ behavior: 'wait' });
 });
 
+test('All photos shows the counts, filters, and opens a photo big', async () => {
+  await page.goto(cardHref);
+  await page.reload();
+  await photoShown(3);
+  await page.getByRole('button', { name: 'All photos' }).click();
+  const grid = page.getByRole('list', { name: 'All photos' });
+  const filter = (name: string) => page.getByRole('group', { name: 'Show' }).getByRole('button', { name });
+  await expect(filter(`Left to tag (${PHOTOS - 2})`)).toBeVisible();
+  await expect(filter('Tagged (2)')).toBeVisible();
+  await expect(filter(`All (${PHOTOS})`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(grid.locator('[aria-current="true"]')).toHaveAccessibleName('Photo 3');
+
+  await filter('Tagged (2)').click();
+  await expect(grid.getByRole('button')).toHaveText(['Bobcat', 'Nothing']);
+  await expect(grid.getByRole('button').first()).toHaveAccessibleName('Photo 1, Bobcat');
+  await filter(`Left to tag (${PHOTOS - 2})`).click();
+  await expect(grid.getByRole('button').first()).toHaveAccessibleName('Photo 3');
+
+  await page.keyboard.press('Escape');
+  await expect(grid).toHaveCount(0);
+  await photoShown(3);
+  await page.getByRole('button', { name: 'All photos' }).click();
+  await filter(`All (${PHOTOS})`).click();
+  await grid.getByRole('button', { name: 'Photo 5', exact: true }).click();
+  await expect(grid).toHaveCount(0);
+  await expect(page.getByText(`Photo 5 of ${PHOTOS}`)).toBeVisible();
+  await photoShown(5);
+});
+
+test('zooms with a double-click onto the original, brightens, and tags while zoomed', async () => {
+  const layer = page.getByTestId('photo-layer');
+  await expect(layer).toHaveAttribute('style', /scale\(1\)/);
+  const original = page.waitForResponse((r) => /\/Media\/[0-9a-f]{64}\/(?!thumb\.jpg|view\.jpg)[^/?]+\?/.test(r.url()) && r.ok());
+  await page.getByTestId('zoom').dblclick();
+  await expect(layer).toHaveAttribute('style', /scale\(2\.5\)/);
+  await original;
+  await expect(page.getByTestId('original')).toHaveAttribute('data-loaded', 'true');
+
+  const brighten = page.getByRole('button', { name: /^Brighten the photo/ });
+  await expect(brighten).toHaveAttribute('aria-pressed', 'false');
+  await brighten.click();
+  await expect(brighten).toHaveAccessibleName('Brighten the photo: brighter');
+  await expect(brighten).toHaveAttribute('aria-pressed', 'true');
+  await expect(layer).toHaveAttribute('style', /filter: brightness\(1\.5\)/);
+
+  await page.getByRole('button', { name: 'Something else…' }).click();
+  await page.getByLabel('Search species').fill('Bobcat');
+  await page.getByRole('list', { name: 'Species' }).getByRole('button', { name: 'Bobcat' }).click();
+  await expect(page.getByTestId('receipt')).toContainText('Bobcat on photo 5');
+  await saved();
+  await expect(page.getByTestId('progress')).toContainText(`3 of ${PHOTOS} photos tagged`);
+  // On to the next photo: the zoom resets, Brighten stays on.
+  await photoShown(6);
+  await expect(layer).toHaveAttribute('style', /scale\(1\).*brightness\(1\.5\)/);
+
+  await page.reload();
+  await expect(page.getByTestId('progress')).toContainText(`3 of ${PHOTOS} photos tagged`);
+  await expect(page.getByRole('button', { name: /^Brighten the photo/ })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'All photos' }).click();
+  await page.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Tagged (3)' }).click();
+  await expect(page.getByRole('list', { name: 'All photos' }).getByRole('button', { name: 'Photo 5, Bobcat' })).toBeVisible();
+});
+
 test('old /simple/ and /classic/ paths go to the new apps', async () => {
   await page.goto('/simple/upload/');
   await expect(page).toHaveURL('/upload/');
