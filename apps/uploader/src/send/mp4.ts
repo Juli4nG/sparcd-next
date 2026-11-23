@@ -89,10 +89,11 @@ export function mp4Time(bytes: Uint8Array): string | undefined {
  * every sample of a timed metadata, text or subtitle track (GPS and the like,
  * stored in `mdat`) is zeroed in place. Sizes don't change, so chunk offsets
  * stay valid and the video still plays. A compressed movie header, or such a
- * track whose samples can't all be found, throws NOT_CLEANED.
+ * track whose samples can't all be found, throws NOT_CLEANED. Works in place,
+ * so a large video is held once.
  */
 export function stripMp4(input: ArrayBuffer): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(input.slice(0));
+  const out = new Uint8Array(input);
   const r = reader(out);
   const tracks: Box[] = [];
   const mdats: Box[] = [];

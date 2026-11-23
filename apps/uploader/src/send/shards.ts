@@ -24,7 +24,7 @@ type Shard = { origin: string; primary: boolean; alive: boolean };
 export type Shards = {
   /** How many endpoints are taking photos right now. */
   live: () => number;
-  put: (key: string, body: Uint8Array<ArrayBuffer>, sha256: string, contentType: string) => Promise<void>;
+  put: (key: string, body: Blob, sha256: string, contentType: string) => Promise<void>;
 };
 
 export async function openShards(session: Session): Promise<Shards> {

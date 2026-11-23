@@ -23,7 +23,7 @@ vi.mock('../src/send/pool', () => ({
       await new Promise((r) => setTimeout(r, 5));
       busy.now -= file.size;
       busy.files--;
-      return { thumb: new ArrayBuffer(1), thumbSha256: 't', view: new ArrayBuffer(1), viewSha256: 'v', original: new ArrayBuffer(1), originalSha256: 'o' };
+      return { thumb: new Blob(), thumbSha256: 't', view: new Blob(), viewSha256: 'v', original: new Blob(), originalSha256: 'o' };
     },
     close: () => {},
   }),

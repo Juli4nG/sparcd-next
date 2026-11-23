@@ -8,7 +8,7 @@ vi.mock('@sparcd/bucket', async (actual) => ({ ...(await actual<object>()), load
 const HOST = 'server.example.org';
 const EXTRA = [8443, 8444, 8445, 8446, 8447, 8448, 8449];
 const session = { bucket: { name: 'sparcd-next-ana' } } as unknown as Session;
-const bytes = new Uint8Array([1, 2, 3]);
+const bytes = new Blob([new Uint8Array([1, 2, 3])]);
 const SHA = 'a'.repeat(64);
 const JPEG = 'image/jpeg';
 

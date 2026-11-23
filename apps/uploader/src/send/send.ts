@@ -202,13 +202,11 @@ export async function sendCard(job: Job): Promise<Outcome> {
  */
 async function putPhoto(shards: Shards, photo: Photo, missing: string[], pool: Pool) {
   const keys = keysOf(photo);
-  const put = (key: string, body: ArrayBuffer, sha256: string, contentType: string) =>
-    shards.put(key, new Uint8Array(body), sha256, contentType);
   const needsStill = isVideo(photo.file.name) && (missing.includes('thumb') || missing.includes('view'));
   const d = await pool.derive(photo.file, needsStill ? await stillFrame(photo.file) : undefined);
   await Promise.all([
-    missing.includes('thumb') && put(keys.thumb, d.thumb, d.thumbSha256, 'image/jpeg'),
-    missing.includes('view') && put(keys.view, d.view, d.viewSha256, 'image/jpeg'),
-    missing.includes('original') && put(keys.original, d.original, d.originalSha256, mediaTypeOf(photo.file.name)),
+    missing.includes('thumb') && shards.put(keys.thumb, d.thumb, d.thumbSha256, 'image/jpeg'),
+    missing.includes('view') && shards.put(keys.view, d.view, d.viewSha256, 'image/jpeg'),
+    missing.includes('original') && shards.put(keys.original, d.original, d.originalSha256, mediaTypeOf(photo.file.name)),
   ]);
 }
