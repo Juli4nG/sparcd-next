@@ -23,7 +23,7 @@ import {
 } from '@sparcd/bucket';
 import { tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
 
-export type ImageSize = 'thumb' | 'view';
+export type ImageSize = 'thumb' | 'view' | 'original';
 
 /**
  * One card's photos and tags, as any tagging screen needs them. `own` is false
@@ -84,11 +84,15 @@ export const byTime = (a: Media, b: Media) =>
 
 const hour = () => Math.floor(Date.now() / 3_600_000);
 
-/** Hour-stable signed URLs, so `<img>` sources repeat within the hour and the browser cache hits. */
-export function bucketImages(bucket: Bucket): Card['imageUrl'] {
+/**
+ * Hour-stable signed URLs, so `<img>` sources repeat within the hour and the browser cache hits.
+ * `originals` maps the person's own photos to their stored file; a row copied from a share has
+ * no original to show, so its view.jpg stands in.
+ */
+export function bucketImages(bucket: Bucket, originals: Map<string, string>): Card['imageUrl'] {
   const cache = new Map<string, { hour: number; url: Promise<string> }>();
   return (mediaID, size, fresh) => {
-    const key = size === 'thumb' ? thumbKey(mediaID) : viewKey(mediaID);
+    const key = size === 'thumb' ? thumbKey(mediaID) : size === 'view' ? viewKey(mediaID) : (originals.get(mediaID) ?? viewKey(mediaID));
     const hit = cache.get(key);
     if (!fresh && hit?.hour === hour()) return hit.url;
     const url = bucket.presignGet(key, { hourStable: !fresh });
@@ -111,7 +115,7 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
     photos,
     tags: tagsFromRows(observations),
     own: !isShared(deployment),
-    imageUrl: bucketImages(session.bucket),
+    imageUrl: bucketImages(session.bucket, new Map(photos.filter(isOwnRow).map((m) => [m.mediaID, m.filePath]))),
     site: {
       cards: new Set(rows.deployments.filter((d) => d.locationID === deployment.locationID).map((d) => d.deploymentID)),
       observations: rows.observations,

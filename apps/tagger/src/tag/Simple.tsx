@@ -6,7 +6,10 @@ import { addTag, NOTHING, removeTag, setCount as setTagCount, speciesTag, tagSta
 import type { Tagging } from '../data/useTagging';
 import { useSpeciesResults } from '../lib/useSpeciesResults';
 import { Dialog, dialogOpen, focusRing, press } from '@sparcd/auth-ui';
-import { TaggedMark, Thumb, useImageUrl } from './Photo';
+import { BigPhoto } from './BigPhoto';
+import { TaggedMark, Thumb } from './Photo';
+import { PhotoGrid } from './PhotoGrid';
+import { BRIGHTEN, nextBrighten, type GridFilter } from './view';
 import { siteFavorites } from './favorites';
 import './simple.css';
 
@@ -44,6 +47,9 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   const [receipt, setReceiptState] = useState<{ text: string; n: number } | null>(null);
   const setReceipt = (text: string) => setReceiptState((r) => ({ text, n: (r?.n ?? 0) + 1 }));
   const [keysUsed, setKeysUsed] = useState(false);
+  const [grid, setGrid] = useState(false);
+  const [filter, setFilter] = useState<GridFilter>('all');
+  const [brighten, setBrighten] = useState(0);
   const undoFocus = useRef<number[]>([]);
   const latest = useRef(tags);
   useEffect(() => {
@@ -113,6 +119,10 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
   const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
   onKey.current = (e) => {
     if (picker || dialogOpen()) return;
+    if (grid) {
+      if (e.key === 'Escape') setGrid(false);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       return undo();
@@ -147,11 +157,44 @@ function Screen({ species, card, title, tagging, favorites }: Props & { favorite
         <SaveIndicator status={tagging.status} />
       </div>
 
-      {current ? (
+      {grid ? (
+        <PhotoGrid
+          card={card}
+          photos={photos}
+          tags={tags}
+          focus={focus}
+          filter={filter}
+          onFilter={setFilter}
+          nameOf={nameOf}
+          onPick={(i) => {
+            moveTo(i);
+            setGrid(false);
+          }}
+          onClose={() => setGrid(false)}
+        />
+      ) : current ? (
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 min-[900px]:overflow-visible min-[900px]:grid-cols-[minmax(0,1fr)_clamp(440px,34vw,500px)]">
           <section className="min-w-0 flex flex-col gap-3 px-5 pt-4 pb-4 min-[900px]:min-h-0" aria-label="Photo" data-shown={shown}>
             <div className="relative aspect-[4/3] bg-ink overflow-hidden min-[900px]:aspect-auto min-[900px]:flex-1 min-[900px]:min-h-0">
-              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} onShown={() => setLoaded(current.mediaID)} />
+              <BigPhoto key={current.mediaID} card={card} photo={current} alt={`Photo ${no(focus)}`} brighten={brighten} onShown={() => setLoaded(current.mediaID)} />
+              <OverPhoto
+                side="left"
+                onClick={() => {
+                  setGrid(true);
+                  // Back from the grid, the photo counts as shown only once it has loaded again.
+                  setLoaded(undefined);
+                }}
+                label="All photos"
+                icon={<GridIcon />}
+              />
+              <OverPhoto
+                side="right"
+                onClick={() => setBrighten(nextBrighten)}
+                label={BRIGHTEN[brighten].label}
+                pressed={brighten > 0}
+                ariaLabel={`Brighten the photo: ${BRIGHTEN[brighten].state}`}
+                icon={<SunIcon />}
+              />
               <NavButton side="left" hidden={focus === 0} onClick={() => go(focus - 1)} />
               <NavButton side="right" hidden={focus === photos.length - 1} onClick={() => go(focus + 1)} />
             </div>
@@ -287,38 +330,43 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
-function BigPhoto({ card, photo, alt, onShown }: { card: Card; photo: Media; alt: string; onShown: () => void }) {
-  // A failed load signs a fresh link once by itself; after that the person asks for it.
-  const { url, failed, retry, onError } = useImageUrl(card, photo.mediaID, 'view');
-  const [loaded, setLoaded] = useState<string>();
-  if (failed)
-    return (
-      <div className="absolute inset-0 grid place-content-center justify-items-center gap-5 p-8 text-center">
-        <p className="text-[20px] text-paper/80">This photo didn't load. Check your internet connection.</p>
-        <button onClick={retry} className={`h-14 px-6 border-2 border-paper/80 text-paper text-[20px] font-[600] hover:bg-paper/10 ${focusRing}`}>
-          Try again
-        </button>
-      </div>
-    );
+/** A pill in a top corner of the photo, clear of the arrows and of what's being zoomed. */
+function OverPhoto({ side, label, icon, pressed, ariaLabel, onClick }: {
+  side: 'left' | 'right';
+  label: string;
+  icon: React.ReactNode;
+  pressed?: boolean;
+  ariaLabel?: string;
+  onClick: () => void;
+}) {
   return (
-    <>
-      {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-paper fn-breathe" />}
-      {url && (
-        <img
-          src={url}
-          alt={alt}
-          draggable={false}
-          onLoad={() => {
-            setLoaded(url);
-            onShown();
-          }}
-          onError={onError}
-          className={`absolute inset-0 w-full h-full object-contain select-none transition-opacity duration-200 ease-out motion-reduce:transition-none ${loaded === url ? 'opacity-100' : 'opacity-0'}`}
-        />
-      )}
-    </>
+    <button
+      onClick={onClick}
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      className={`absolute top-3 ${side === 'left' ? 'left-3' : 'right-3'} h-12 pl-3.5 pr-4 inline-flex items-center gap-2 rounded-full text-[18px] font-[600] shadow ${pressed ? 'bg-ink text-paper hover:opacity-90' : 'bg-paper/85 text-ink hover:bg-paper'} ${press} ${focusRing}`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
+
+const GridIcon = () => (
+  <svg aria-hidden viewBox="0 0 20 20" className="w-5 h-5" fill="currentColor">
+    <rect x="2" y="2" width="7" height="7" />
+    <rect x="11" y="2" width="7" height="7" />
+    <rect x="2" y="11" width="7" height="7" />
+    <rect x="11" y="11" width="7" height="7" />
+  </svg>
+);
+
+const SunIcon = () => (
+  <svg aria-hidden viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <circle cx="10" cy="10" r="3.5" fill="currentColor" />
+    <path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6 16 16M4 16l1.4-1.4M14.6 5.4 16 4" />
+  </svg>
+);
 
 function NavButton({ side, hidden, onClick }: { side: 'left' | 'right'; hidden: boolean; onClick: () => void }) {
   return (
