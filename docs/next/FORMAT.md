@@ -146,12 +146,15 @@ deployment's. So the stored original's SHA-256 is not its `mediaID`.
 A stored MP4 or MOV video has every `udta`, `meta` and `uuid` box, at the top
 level and anywhere inside `moov`, turned into a `free` box of the same size
 with a zeroed payload. That drops user data such as the `©xyz` location, maker
-tags and XMP. Every sample of a timed metadata track (a `trak` whose handler
-is `meta`, or whose samples are `gpmd`, `camm`, `mett` or `mebx`), which is
-where GPS logs live, is zeroed in place in `mdat`. Box sizes don't change, so
-chunk offsets stay valid and the video still plays. A video with a compressed
-movie header (`cmov`), or a fragmented one with a metadata track, can't be
-cleaned this way and isn't uploaded. Its time
+tags and XMP. Every `free` and `skip` box keeps its header and has its payload
+zeroed, since some cameras leave logs there. Every sample of a timed metadata,
+text or subtitle track (a `trak` whose handler is `meta`, `sbtl`, `text` or
+`subt`, or whose samples are `gpmd`, `camm`, `mett`, `mebx`, `tx3g`, `text`,
+`wvtt` or `stpp`), which is where GPS logs live, is zeroed in place in `mdat`.
+Box sizes don't change, so chunk offsets stay valid and the video still plays.
+A video with a compressed movie header (`cmov`), or a fragmented one with such
+a track, can't be cleaned this way and isn't uploaded; one whose sample table
+points outside `mdat` is malformed and left out too. Its time
 is the `mvhd` creation time, read first. Trail cameras write local wall-clock
 time there, so it takes the lab zone like a photo's `DateTimeOriginal`; zero or
 a time before 2000 counts as missing and is estimated.

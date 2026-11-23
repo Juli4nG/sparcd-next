@@ -40,6 +40,20 @@ function mvhd(version: 0 | 1, seconds: number): Uint8Array {
 
 const ftyp = box('ftyp', ascii('isom'), new Uint8Array(4), ascii('isommp41'));
 const mdat = (n: number) => box('mdat', new Uint8Array(n).fill(0xab));
+const latin1 = (b: Uint8Array) => new TextDecoder('latin1').decode(b);
+const unreadable = (message: RegExp) => expect.objectContaining({ name: 'EncodingError', message: expect.stringMatching(message) });
+
+/** Indices where `out` differs from `file`, as [from, to) runs. */
+const changed = (file: Uint8Array, out: Uint8Array) => {
+  const runs: [number, number][] = [];
+  for (let i = 0; i < file.length; i++) {
+    if (file[i] === out[i]) continue;
+    const last = runs.at(-1);
+    if (last && last[1] === i) last[1]++;
+    else runs.push([i, i + 1]);
+  }
+  return runs;
+};
 
 describe('mp4Time', () => {
   it('reads a version 0 mvhd creation time as wall-clock text', () => {
@@ -79,7 +93,7 @@ describe('stripMp4', () => {
     const out = stripMp4(file.slice().buffer);
     expect(out.length).toBe(file.length);
 
-    const text = new TextDecoder('latin1').decode(out);
+    const text = latin1(out);
     for (const gone of ['+00.0000', '\xa9xyz', 'udta', 'meta', 'uuid', 'vendor-serial', 'ilst-camera', 'top-level user data']) {
       expect(text).not.toContain(gone);
     }
@@ -118,6 +132,17 @@ describe('stripMp4', () => {
     // The large box keeps its 64-bit size, the last box its size 0.
     expect(new DataView(out.buffer).getBigUint64(ftyp.length + 8)).toBe(BigInt(16 + 12));
     expect(new DataView(out.buffer).getUint32(file.length - last.length)).toBe(0);
+  });
+
+  it('zeroes the payload of every free and skip box, top level and inside moov and trak, keeping their headers', () => {
+    const file = cat(
+      ftyp,
+      box('free', ascii('camera-log-0001')),
+      mdat(16),
+      box('moov', mvhd(0, 0), box('skip', ascii('debug-trace')), box('trak', box('tkhd', new Uint8Array(20)), box('free', ascii('gps-cache')))),
+    );
+    const where = (s: string) => [latin1(file).indexOf(s), latin1(file).indexOf(s) + s.length];
+    expect(changed(file, stripMp4(file.slice().buffer))).toEqual([where('camera-log-0001'), where('debug-trace'), where('gps-cache')]);
   });
 
   it('refuses a file whose boxes run past its end', () => {
@@ -166,17 +191,6 @@ describe('stripMp4 on timed metadata tracks', () => {
   const at = (n: number) => MDAT + n;
   const video = trak({ handler: 'vide', format: 'avc1', sizes: [16], runs: [[1, 1]], chunks: [at(0)] });
   const movie = (...traks: Uint8Array[]) => cat(ftyp, mdat(200), box('moov', mvhd(0, 0), ...traks));
-  /** Indices where `out` differs from `file`, as [from, to) runs. */
-  const changed = (file: Uint8Array, out: Uint8Array) => {
-    const runs: [number, number][] = [];
-    for (let i = 0; i < file.length; i++) {
-      if (file[i] === out[i]) continue;
-      const last = runs.at(-1);
-      if (last && last[1] === i) last[1]++;
-      else runs.push([i, i + 1]);
-    }
-    return runs;
-  };
 
   it('zeroes every sample of a meta-handler GPS track in place and leaves the video samples alone', () => {
     const gps = trak({ handler: 'meta', format: 'gpmd', sizes: [5, 7, 9], runs: [[1, 2], [2, 1]], chunks: [at(20), at(120)] });
@@ -192,6 +206,24 @@ describe('stripMp4 on timed metadata tracks', () => {
     expect(changed(file, stripMp4(file.slice().buffer))).toEqual([[at(40), at(52)], [at(60), at(72)]]);
   });
 
+  it('zeroes the samples of text and subtitle tracks, found by handler or by sample format', () => {
+    const tracks = [['sbtl', 'zzzz'], ['text', 'zzzz'], ['subt', 'zzzz'], ['zzzz', 'tx3g'], ['zzzz', 'text'], ['zzzz', 'wvtt'], ['zzzz', 'stpp']];
+    for (const [handler, format] of tracks) {
+      const subtitles = trak({ handler, format, sizes: [6], runs: [[1, 1]], chunks: [at(50)] });
+      const file = movie(video, subtitles);
+      expect(changed(file, stripMp4(file.slice().buffer))).toEqual([[at(50), at(56)]]);
+    }
+  });
+
+  it('leaves out a whole file when one sample lies outside every mdat, even beside a good track', () => {
+    const gps = trak({ handler: 'meta', format: 'gpmd', sizes: [4], runs: [[1, 1]], chunks: [at(0)] });
+    // In the moov box after mdat, then straddling mdat's end.
+    for (const chunk of [at(210), at(196)]) {
+      const stray = trak({ handler: 'meta', format: 'gpmd', sizes: [8], runs: [[1, 1]], chunks: [chunk] });
+      expect(() => stripMp4(movie(gps, stray).buffer)).toThrow(unreadable(/outside mdat/));
+    }
+  });
+
   it('refuses a compressed movie header, and a fragmented file with a metadata track', () => {
     const notCleaned = expect.objectContaining({ name: NOT_CLEANED });
     const compressed = cat(ftyp, box('moov', box('cmov', box('dcom', ascii('zlib')), box('cmvd', new Uint8Array(12)))));
@@ -204,9 +236,8 @@ describe('stripMp4 on timed metadata tracks', () => {
   });
 
   it('leaves out as unreadable a sample past the end, a short table, deep nesting or too many boxes', () => {
-    const unreadable = (message: RegExp) => expect.objectContaining({ name: 'EncodingError', message: expect.stringMatching(message) });
     const past = trak({ handler: 'meta', format: 'gpmd', sizes: [8], runs: [[1, 1]], chunks: [at(1_000_000)] });
-    expect(() => stripMp4(movie(past).buffer)).toThrow(unreadable(/sample runs past the end/));
+    expect(() => stripMp4(movie(past).buffer)).toThrow(unreadable(/outside mdat/));
     const short = trak({ handler: 'meta', format: 'gpmd', sizes: [4, 4], runs: [[1, 1]], chunks: [at(0)] });
     expect(() => stripMp4(movie(short).buffer)).toThrow(unreadable(/fewer samples/));
     const lying = full('stsz', u32(0, 1000, 4));
