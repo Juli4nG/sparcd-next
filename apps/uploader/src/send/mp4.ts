@@ -110,7 +110,7 @@ export function stripMp4(input: ArrayBuffer): Uint8Array<ArrayBuffer> {
     if (!isTimedMetadata(r, out, trak, stbl)) continue;
     // Fragments carry samples that the sample table doesn't list.
     if (fragmented) throw notCleaned('MP4 is fragmented and has a metadata track');
-    zeroSamples(r, out, stbl!);
+    zeroSamples(r, out, stbl);
   }
   return out;
 }
@@ -127,7 +127,7 @@ function isTimedMetadata(r: Reader, b: Uint8Array, trak: Box, stbl?: Box): boole
 }
 
 /** Zeroes every sample of a track, chunk by chunk: `stco`/`co64` place chunks, `stsc` counts their samples, `stsz` sizes them. */
-function zeroSamples(r: Reader, b: Uint8Array, stbl: Box) {
+function zeroSamples(r: Reader, b: Uint8Array, stbl?: Box) {
   const { view } = r;
   const stsz = r.find('stsz', stbl);
   const stsc = r.find('stsc', stbl);
