@@ -215,6 +215,8 @@ function Original({ card, mediaID, aspect }: { card: Card; mediaID: string; aspe
       data-testid="original"
       data-loaded={shown}
       // The stored original has no EXIF, so one the camera meant to be turned would show on its side; view.jpg stays then.
+      // A half turn or a mirror keeps the shape and can't be told from here, so it would show flipped. Trail cameras write
+      // no turn, so that risk is accepted rather than comparing pixels.
       onLoad={(e) => setShown(Math.abs(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight - aspect) < 0.02)}
       onError={onError}
       className={`absolute inset-0 w-full h-full object-contain select-none ${shown ? '' : 'invisible'}`}
