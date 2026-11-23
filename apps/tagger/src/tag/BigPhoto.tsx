@@ -3,7 +3,7 @@ import type { Media } from '@sparcd/bucket';
 import { focusRing } from '@sparcd/auth-ui';
 import type { Card } from '../data/card';
 import { useImageUrl } from './Photo';
-import { BRIGHTEN, DOUBLE_TAP_ZOOM, NO_ZOOM, ORIGINAL_AT, clampZoom, contained, zoomAt, type Size, type Zoom } from './view';
+import { BRIGHTEN, DOUBLE_TAP_ZOOM, NO_ZOOM, ORIGINAL_AT, brightenFilter, clampZoom, contained, zoomAt, type Size, type Zoom } from './view';
 
 type Point = { x: number; y: number };
 type Gesture = { start: Zoom; from: Point; dist: number; moved: boolean };
@@ -118,6 +118,17 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
   return (
     <>
       {loaded !== url && <div aria-hidden className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-paper fn-breathe" />}
+      <svg aria-hidden width="0" height="0" className="absolute">
+        {BRIGHTEN.slice(1).map((b, i) => (
+          <filter key={b.state} id={`brighten-${i + 1}`} colorInterpolationFilters="sRGB">
+            <feComponentTransfer>
+              <feFuncR type="gamma" exponent={b.gamma} />
+              <feFuncG type="gamma" exponent={b.gamma} />
+              <feFuncB type="gamma" exponent={b.gamma} />
+            </feComponentTransfer>
+          </filter>
+        ))}
+      </svg>
       <div
         ref={box}
         data-testid="zoom"
@@ -131,7 +142,7 @@ export function BigPhoto({ card, photo, alt, brighten, onShown }: { card: Card; 
       >
         <div
           data-testid="photo-layer"
-          style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`, filter: BRIGHTEN[brighten].filter }}
+          style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`, filter: brightenFilter(brighten) }}
           className={`absolute inset-0 ${glide ? 'transition-transform duration-200 ease-out motion-reduce:transition-none' : ''}`}
         >
           {url && (

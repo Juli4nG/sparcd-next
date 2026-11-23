@@ -40,12 +40,16 @@ export function zoomAt(z: Zoom, s: number, from: Point, photo: Size, box: Size, 
 }
 
 // Brighten: off, brighter, brightest. It lasts from photo to photo, since night photos come in runs.
+// A gamma curve, not CSS brightness(): on infrared night photos brightness() lifts the dark woods only
+// by turning the flash-lit animal into a white blob, while gamma lifts the shadows and keeps its detail.
 
 export const BRIGHTEN = [
-  { label: 'Brighten', state: 'off', filter: undefined },
-  { label: 'Brighter', state: 'brighter', filter: 'brightness(1.5) contrast(1.1)' },
-  { label: 'Brightest', state: 'brightest', filter: 'brightness(2.2) contrast(1.2)' },
+  { label: 'Brighten', state: 'off', gamma: 1 },
+  { label: 'Brighter', state: 'brighter', gamma: 0.6 },
+  { label: 'Brightest', state: 'brightest', gamma: 0.4 },
 ] as const;
+
+export const brightenFilter = (level: number): string | undefined => (level ? `url(#brighten-${level})` : undefined);
 
 export const nextBrighten = (level: number): number => (level + 1) % BRIGHTEN.length;
 

@@ -226,7 +226,7 @@ test('zooms with a double-click onto the original, brightens, and tags while zoo
   await brighten.click();
   await expect(brighten).toHaveAccessibleName('Brighten the photo: brighter');
   await expect(brighten).toHaveAttribute('aria-pressed', 'true');
-  await expect(layer).toHaveAttribute('style', /filter: brightness\(1\.5\)/);
+  await expect(layer).toHaveAttribute('style', /filter: url\("?#brighten-1"?\)/);
 
   await page.getByRole('button', { name: 'Something else…' }).click();
   await page.getByLabel('Search species').fill('Bobcat');
@@ -236,7 +236,7 @@ test('zooms with a double-click onto the original, brightens, and tags while zoo
   await expect(page.getByTestId('progress')).toContainText(`3 of ${PHOTOS} photos tagged`);
   // On to the next photo: the zoom resets, Brighten stays on.
   await photoShown(6);
-  await expect(layer).toHaveAttribute('style', /scale\(1\).*brightness\(1\.5\)/);
+  await expect(layer).toHaveAttribute('style', /scale\(1\).*#brighten-1/);
 
   await page.reload();
   await expect(page.getByTestId('progress')).toContainText(`3 of ${PHOTOS} photos tagged`);

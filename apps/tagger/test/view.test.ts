@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Media } from '@sparcd/bucket';
 import { NOTHING, type PhotoTag } from '../src/data/tags';
-import { BRIGHTEN, MAX_ZOOM, NO_ZOOM, clampZoom, contained, filterCounts, filtered, gridColumns, nextBrighten, tileLabel, zoomAt } from '../src/tag/view';
+import { BRIGHTEN, MAX_ZOOM, NO_ZOOM, brightenFilter, clampZoom, contained, filterCounts, filtered, gridColumns, nextBrighten, tileLabel, zoomAt } from '../src/tag/view';
 
 const box = { w: 800, h: 600 };
 const photo = { w: 800, h: 450 }; // a 16:9 photo in a 4:3 box, letterboxed top and bottom
@@ -45,8 +45,8 @@ describe('brighten', () => {
   it('steps off, brighter, brightest, then off', () => {
     expect([0, 1, 2].map(nextBrighten)).toEqual([1, 2, 0]);
     expect(BRIGHTEN.map((b) => b.label)).toEqual(['Brighten', 'Brighter', 'Brightest']);
-    expect(BRIGHTEN[0].filter).toBeUndefined();
-    expect(BRIGHTEN[2].filter).toContain('brightness(');
+    expect(BRIGHTEN.map((b) => b.gamma)).toEqual([1, 0.6, 0.4]);
+    expect([0, 1, 2].map(brightenFilter)).toEqual([undefined, 'url(#brighten-1)', 'url(#brighten-2)']);
   });
 });
 
