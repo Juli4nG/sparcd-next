@@ -36,18 +36,22 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
   const shown = useMemo(() => filtered(photos, tags, filter), [photos, tags, filter]);
   const scroller = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [topRow, setTopRow] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
   const aimed = useRef<GridFilter | null>(null);
 
   const width = Math.max(0, size.w - 2 * PAD);
   const cols = gridColumns(width);
   const rowH = ((width - (cols - 1) * GAP) / cols) * 0.75 + GAP;
   const rows = Math.ceil(shown.length / cols);
-  const rowAt = (scrollTop: number) => Math.max(0, Math.floor((scrollTop - PAD) / rowH));
+  // From the real scroll position each render, so a resize that changes the row height keeps the screen filled.
+  const topRow = Math.max(0, Math.floor((scrollTop - PAD) / rowH));
 
   useLayoutEffect(() => {
     const el = scroller.current!;
-    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    const measure = () => {
+      setSize({ w: el.clientWidth, h: el.clientHeight });
+      setScrollTop(el.scrollTop);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     measure();
@@ -60,7 +64,7 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
     const at = shown.findIndex((i) => i >= focus);
     const row = Math.floor((at < 0 ? shown.length - 1 : at) / cols);
     scroller.current!.scrollTop = Math.max(0, PAD + row * rowH - (size.h - rowH) / 2);
-    setTopRow(rowAt(scroller.current!.scrollTop));
+    setScrollTop(scroller.current!.scrollTop);
   }, [size, filter, shown, focus, cols, rowH]);
 
   const first = Math.max(0, topRow - BUFFER);
@@ -88,7 +92,7 @@ export function PhotoGrid({ card, photos, tags, focus, filter, onFilter, nameOf,
 
       <div
         ref={scroller}
-        onScroll={(e) => setTopRow(rowAt(e.currentTarget.scrollTop))}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
         className="flex-1 min-h-0 overflow-y-auto"
         style={{ padding: PAD }}
       >
