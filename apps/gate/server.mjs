@@ -405,6 +405,12 @@ function respondJson(res, status, value) {
 // rejects.
 function readBody(req, limit, account, idleMs) {
   return new Promise((resolve) => {
+    // Node's parser delivers at most Content-Length bytes, so a declared body
+    // fills one buffer, with no second copy of it at the end. A large
+    // allocUnsafe buffer is committed page by page as bytes land, so memory
+    // still follows the budget, which charges what arrives.
+    const declared = req.headers['content-length'];
+    const whole = declared !== undefined && Number(declared) <= limit ? Buffer.allocUnsafe(Number(declared)) : null;
     const chunks = [];
     let size = 0;
     let settled = false;
@@ -427,9 +433,10 @@ function readBody(req, limit, account, idleMs) {
       size += chunk.length;
       if (size > limit) { done({ error: 'too-large' }); return; }
       if (!account.charge(chunk.length)) { done({ error: 'busy' }); return; }
-      chunks.push(chunk);
+      if (whole) chunk.copy(whole, size - chunk.length);
+      else chunks.push(chunk);
     });
-    req.on('end', () => done({ body: Buffer.concat(chunks) }));
+    req.on('end', () => done({ body: whole ? whole.subarray(0, size) : Buffer.concat(chunks) }));
     req.on('aborted', () => done({ error: 'aborted' }));
     req.on('error', () => done({ error: 'aborted' }));
   });

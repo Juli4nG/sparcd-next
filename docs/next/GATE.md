@@ -103,7 +103,8 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   - A response naming any other bucket is a 502.
 - **Payload hashing:**
   - UNSIGNED-PAYLOAD is refused on header-signed requests. Clients send the
-    real body hash, which for a photo PUT is its `mediaID`.
+    real body hash. For a photo or video PUT that is the hash of the stored
+    file, with its camera data removed, so it is not the `mediaID`.
   - Streaming payloads are refused.
 - **Presigned query-string URLs:**
   - GET and HEAD only, verified with the person's key.

@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
+import { connect } from 'node:net';
 import { AwsClient } from 'aws4fetch';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -56,8 +57,23 @@ test('object requests carry a key made for their bucket; listings carry none; pl
 test('gate HTTP requests and responses', async (t) => {
   const masterKey = Buffer.alloc(32, 9).toString('base64');
   const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
+  const VIDEO = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
+  const puts = [];
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'PUT') {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      return req.on('end', () => {
+        puts.push(Buffer.concat(chunks));
+        res.writeHead(200, { etag: '"e"' }).end();
+      });
+    }
+    if (url.pathname.endsWith('/video.mp4')) {
+      const [, from, to] = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+      res.writeHead(206, { 'content-range': `bytes ${from}-${to}/${VIDEO.length}`, 'content-length': to - from + 1 });
+      return res.end(VIDEO.subarray(Number(from), Number(to) + 1));
+    }
     if (url.searchParams.get('prefix') === 'access/people/') {
       return res.end('<Contents><Key>access/people/ana.json</Key><ETag>person</ETag></Contents>');
     }
@@ -88,12 +104,12 @@ test('gate HTTP requests and responses', async (t) => {
   const port = await gate.listen(0);
   const bucket = '/sparcd-next-ana';
   const media = `${bucket}/Media/test.html`;
-  const call = async (path, { method = 'GET', presigned = false, body, headers = {}, sign = true, to = port } = {}) => {
+  const call = async (path, { method = 'GET', presigned = false, body, signBody = false, chunked = false, headers = {}, sign = true, to = port } = {}) => {
     const target = new URL(path, 'http://gate.test');
     if (presigned) target.searchParams.set('X-Amz-Expires', '7200');
     if (sign) {
       const req = presigned ? await aws.sign(target, { method, aws: { signQuery: true } })
-        : await signed(target, { method });
+        : await signed(target, { method, body: signBody ? body : undefined });
       target.search = new URL(req.url).search;
       headers = { ...Object.fromEntries(req.headers), ...headers };
     }
@@ -109,7 +125,9 @@ test('gate HTTP requests and responses', async (t) => {
         res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
       });
       req.on('error', reject);
-      req.end(body);
+      // A write before end() sends the body chunked, with no Content-Length.
+      if (chunked) req.write(body);
+      req.end(chunked ? undefined : body);
     });
   };
 
@@ -151,6 +169,56 @@ test('gate HTTP requests and responses', async (t) => {
     } finally {
       await small.close();
     }
+  });
+
+  await t.test('a body arrives whole, with or without a declared length', async () => {
+    const body = Buffer.from(Array.from({ length: 300_000 }, (_, i) => (i * 7) % 256));
+    for (const chunked of [false, true]) {
+      puts.length = 0;
+      const res = await call(`${bucket}/body.bin`, { method: 'PUT', body, signBody: true, chunked });
+      assert.equal(res.status, 200);
+      assert.deepEqual(puts, [body]);
+    }
+  });
+
+  await t.test('a body shorter than its declared length stalls into 408; bytes past it are not body', async () => {
+    const quick = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, bodyIdleMs: 200,
+    });
+    try {
+      const to = await quick.listen(0);
+      /** The first response's status line; the socket stays open, as a client waiting on more would. */
+      const raw = (bytes) => new Promise((resolve, reject) => {
+        const socket = connect(to, '127.0.0.1', () => socket.write(bytes));
+        let text = '';
+        socket.on('data', (d) => {
+          text += d;
+          if (text.includes('\r\n')) {
+            socket.destroy();
+            resolve(text.slice(0, text.indexOf('\r\n')));
+          }
+        });
+        socket.on('error', reject);
+      });
+      const req = await signed(new URL(`http://gate.test${bucket}/body.bin`), { method: 'PUT', body: '0123456789' });
+      const head = [`PUT ${bucket}/body.bin HTTP/1.1`, 'host: gate.test', 'content-length: 10', ...[...req.headers].map(([k, v]) => `${k}: ${v}`), '', ''].join('\r\n');
+      assert.equal(await raw(`${head}0123`), 'HTTP/1.1 408 Request Timeout');
+      puts.length = 0;
+      // What follows the ten bytes is the start of a next request, which never finishes.
+      assert.equal(await raw(`${head}0123456789GET / HTTP/1.1\r\n`), 'HTTP/1.1 200 OK');
+      assert.deepEqual(puts.map(String), ['0123456789']);
+    } finally {
+      await quick.close();
+    }
+  });
+
+  await t.test('a presigned GET passes Range through and answers 206', async () => {
+    const res = await call(`${bucket}/Media/video.mp4`, { presigned: true, headers: { range: 'bytes=100-199' } });
+    assert.equal(res.status, 206);
+    assert.equal(res.headers['content-range'], 'bytes 100-199/1000');
+    assert.equal(res.headers['content-length'], '100');
+    assert.equal(res.headers['cache-control'], 'private, max-age=7200, immutable');
   });
 
   await t.test('object responses are sandboxed and only presigned Media GETs are cached', async () => {
