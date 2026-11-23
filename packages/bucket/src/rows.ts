@@ -109,7 +109,13 @@ export function shareTables(rows: PackageRows, share: ShareRecipe): PackageRows 
       })),
     media: rows.media
       .filter((m) => ids.has(m.deploymentID) && m.filePublic === 'true' && !human.has(m.mediaID))
-      .map((m) => ({ ...m, deploymentID: ids.get(m.deploymentID)!, filePath: `Media/${m.mediaID}/${share.image}.jpg` })),
+      // A video is shared as its still, so the row describes a JPEG.
+      .map((m) => ({
+        ...m,
+        deploymentID: ids.get(m.deploymentID)!,
+        filePath: `Media/${m.mediaID}/${share.image}.jpg`,
+        fileMediatype: 'image/jpeg',
+      })),
     observations: [],
   };
 }

@@ -49,7 +49,9 @@ install -m 0644 "$GATE_SRC"/settings-example/* "$APP/settings-example/"
 install -d -m 0700 /etc/sparcd-next
 if [ ! -f "$ENV_FILE" ]; then
   umask 077
-  sed -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}|" \
+  # The upload shards on 8443-8449 sign host:port, so each is an allowed host too.
+  SHARD_HOSTS=$(for p in 8443 8444 8445 8446 8447 8448 8449; do printf ',%s:%s' "$SITE_ADDRESS" "$p"; done)
+  sed -e "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=${SITE_ADDRESS}${SHARD_HOSTS}|" \
       -e '/^ACCESS_MASTER_KEY=/d' -e '/^DATA_KEY=/d' \
       "$GATE_SRC/deploy/gate.env.example" > "$ENV_FILE"
   umask 022
@@ -67,9 +69,11 @@ done
 chown root:root "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 
-# Static files. The home page starts as apps/sparcd-home until a build replaces it.
-install -d -m 0755 /srv/sparcd-next/upload /srv/sparcd-next/tag /srv/sparcd-next/home
-[ -f /srv/sparcd-next/home/index.html ] || install -m 0644 "$REPO"/apps/sparcd-home/{index.html,favicon.ico,sparcd.png} /srv/sparcd-next/home/
+# Static files. The home page is apps/sparcd-home as it stands; the Uploader
+# and Tagger builds are copied into upload/ and tag/.
+install -d -m 0755 /srv/sparcd-next/upload /srv/sparcd-next/tag /srv/sparcd-next/home/fonts
+install -m 0644 "$REPO"/apps/sparcd-home/{index.html,favicon.ico,sparcd.png} /srv/sparcd-next/home/
+install -m 0644 "$REPO"/apps/sparcd-home/fonts/* /srv/sparcd-next/home/fonts/
 
 install -m 0644 "$GATE_SRC/deploy/sparcd-gate.service" /etc/systemd/system/sparcd-gate.service
 install -m 0644 "$GATE_SRC/deploy/Caddyfile" /etc/caddy/Caddyfile

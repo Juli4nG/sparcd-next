@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
+import { connect } from 'node:net';
 import { AwsClient } from 'aws4fetch';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -45,7 +46,7 @@ test('object requests carry a key made for their bucket; listings carry none; pl
   const options = { endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey };
   const up = makeUpstream(options);
   await up.send(up.url('sparcd-next-ana', 'Media/x/thumb.jpg'));
-  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: Buffer.from('x') });
+  await up.send(new URL('https://objects.example.org/sparcd-next-%61na/Media/x/view.jpg'), { method: 'PUT', body: [Buffer.from('x')] });
   await up.put('sparcd-next-settings', 'lab.json', '{}');
   await up.listPage('sparcd-next-ana', { prefix: 'Media/' });
   assert.deepEqual(seen.map(([, , m]) => m), [md5('sparcd-next-ana'), md5('sparcd-next-ana'), md5('sparcd-next-settings'), null]);
@@ -53,11 +54,50 @@ test('object requests carry a key made for their bucket; listings carry none; pl
   assert.throws(() => makeUpstream({ ...options, endpoint: 'http://objects.example.org' }), /https/);
 });
 
+test('a body goes upstream as views into the buffers it arrived in, under their summed length', async (t) => {
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (req) => {
+    sent = { length: req.headers.get('content-length'), parts: [] };
+    for await (const part of req.body) sent.parts.push(part);
+    return new Response('');
+  });
+  const up = makeUpstream({ endpoint: 'https://objects.example.org', accessKeyId: 'k', secretAccessKey: 's', dataKey: null });
+  const body = [Buffer.alloc(3, 1), Buffer.alloc(0), Buffer.alloc((1 << 20) + 5, 2)];
+  await up.send(up.url('sparcd-next-ana', 'a.bin'), { method: 'PUT', body, headers: { 'x-amz-content-sha256': 'f'.repeat(64) } });
+  assert.equal(sent.length, String(3 + (1 << 20) + 5));
+  assert.deepEqual(
+    sent.parts.map((p) => [body.findIndex((b) => b.buffer === p.buffer), p.byteOffset, p.length]),
+    [[0, body[0].byteOffset, 3], [2, body[2].byteOffset, 1 << 20], [2, body[2].byteOffset + (1 << 20), 5]],
+  );
+});
+
 test('gate HTTP requests and responses', async (t) => {
   const masterKey = Buffer.alloc(32, 9).toString('base64');
   const wrappedSecret = await wrapSecret(await loadMasterKey(masterKey), KEY.secretAccessKey);
+  const VIDEO = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
+  const puts = [];
+  const putHeaders = [];
+  let onSlowPut = () => {};
   const upstream = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'PUT' && url.pathname.endsWith('/slow')) {
+      req.resume();
+      return onSlowPut(res);
+    }
+    if (req.method === 'PUT') {
+      putHeaders.push(req.headers);
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      return req.on('end', () => {
+        puts.push(Buffer.concat(chunks));
+        res.writeHead(200, { etag: '"e"' }).end();
+      });
+    }
+    if (url.pathname.endsWith('/video.mp4')) {
+      const [, from, to] = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+      res.writeHead(206, { 'content-range': `bytes ${from}-${to}/${VIDEO.length}`, 'content-length': to - from + 1 });
+      return res.end(VIDEO.subarray(Number(from), Number(to) + 1));
+    }
     if (url.searchParams.get('prefix') === 'access/people/') {
       return res.end('<Contents><Key>access/people/ana.json</Key><ETag>person</ETag></Contents>');
     }
@@ -88,18 +128,18 @@ test('gate HTTP requests and responses', async (t) => {
   const port = await gate.listen(0);
   const bucket = '/sparcd-next-ana';
   const media = `${bucket}/Media/test.html`;
-  const call = async (path, { method = 'GET', presigned = false, body, headers = {}, sign = true } = {}) => {
+  const call = async (path, { method = 'GET', presigned = false, body, signBody = false, chunked = false, headers = {}, sign = true, to = port } = {}) => {
     const target = new URL(path, 'http://gate.test');
     if (presigned) target.searchParams.set('X-Amz-Expires', '7200');
     if (sign) {
       const req = presigned ? await aws.sign(target, { method, aws: { signQuery: true } })
-        : await signed(target, { method });
+        : await signed(target, { method, body: signBody ? body : undefined, headers });
       target.search = new URL(req.url).search;
       headers = { ...Object.fromEntries(req.headers), ...headers };
     }
     return new Promise((resolve, reject) => {
       const req = request({
-        hostname: '127.0.0.1', port, method, path: target.pathname + target.search,
+        hostname: '127.0.0.1', port: to, method, path: target.pathname + target.search,
         headers: { host: 'gate.test', ...headers },
       }, (res) => {
         res.setEncoding('utf8');
@@ -109,7 +149,9 @@ test('gate HTTP requests and responses', async (t) => {
         res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
       });
       req.on('error', reject);
-      req.end(body);
+      // A write before end() sends the body chunked, with no Content-Length.
+      if (chunked) req.write(body);
+      req.end(chunked ? undefined : body);
     });
   };
 
@@ -136,6 +178,117 @@ test('gate HTTP requests and responses', async (t) => {
     assert.equal((await call(media, { method: 'HEAD', headers: { 'transfer-encoding': 'chunked' }, sign: false })).status, 400);
   });
 
+  await t.test('a person may hold one whole body in flight even when that is more than a quarter of the buffer', async () => {
+    const small = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, maxBodyBytes: 100, maxBufferedBytes: 200,
+    });
+    try {
+      const to = await small.listen(0);
+      // 80 bytes is past a quarter (50): the budget lets it through, and only the unsigned body hash is refused.
+      const within = await call(media, { method: 'PUT', body: 'x'.repeat(80), to });
+      assert.equal(within.status, 403);
+      assert.match(within.text, /does not match|SignatureDoesNotMatch|XAmzContentSHA256Mismatch/);
+      assert.equal((await call(media, { method: 'PUT', body: 'x'.repeat(120), to })).status, 413);
+    } finally {
+      await small.close();
+    }
+  });
+
+  await t.test('a body arrives whole, with or without a declared length', async () => {
+    const body = Buffer.from(Array.from({ length: 3_000_000 }, (_, i) => (i * 7) % 256));
+    for (const chunked of [false, true]) {
+      puts.length = 0;
+      putHeaders.length = 0;
+      const res = await call(`${bucket}/body.bin`, { method: 'PUT', body, signBody: true, chunked });
+      assert.equal(res.status, 200);
+      assert.deepEqual(puts, [body]);
+      // Upstream gets a Content-Length, never chunked, and the real body hash.
+      assert.equal(putHeaders[0]['content-length'], String(body.length));
+      assert.equal(putHeaders[0]['transfer-encoding'], undefined);
+      assert.equal(putHeaders[0]['x-amz-content-sha256'], await sha256hex(body));
+      assert.match(putHeaders[0].authorization, /SignedHeaders=[^,]*x-amz-content-sha256/);
+    }
+  });
+
+  await t.test('a bad or missing signature is refused before a declared body is read', async () => {
+    const raw = (head) => new Promise((resolve, reject) => {
+      const socket = connect(port, '127.0.0.1', () => socket.write(head));
+      let text = '';
+      socket.on('data', (d) => {
+        text += d;
+        if (!text.includes('</Error>')) return;
+        socket.destroy();
+        resolve(text);
+      });
+      socket.on('error', reject);
+    });
+    const req = await signed(new URL(`http://gate.test${bucket}/big.bin`), { method: 'PUT', body: 'x' });
+    const forged = [...req.headers].map(([k, v]) => `${k}: ${k === 'authorization' ? `${v.slice(0, -4)}dead` : v}`);
+    puts.length = 0;
+    for (const [lines, pattern] of [
+      [forged, /<Code>SignatureDoesNotMatch<\/Code><Message>signature mismatch</],
+      [[], /<Code>InvalidAccessKeyId<\/Code><Message>unknown login</],
+    ]) {
+      // 200 MB declared, none of it sent: the answer cannot have waited on the body.
+      const head = [`PUT ${bucket}/big.bin HTTP/1.1`, 'host: gate.test', 'content-length: 200000000',
+        ...lines, '', ''].join('\r\n');
+      const text = await raw(head);
+      assert.match(text, /^HTTP\/1.1 403 /);
+      assert.match(text, pattern);
+    }
+    assert.deepEqual(puts, []);
+  });
+
+  await t.test('a body that does not match its signed hash is refused and never forwarded', async () => {
+    puts.length = 0;
+    // Signed as an empty body.
+    const res = await call(`${bucket}/body.bin`, { method: 'PUT', body: 'hello' });
+    assert.equal(res.status, 403);
+    assert.match(res.text, /<Code>SignatureDoesNotMatch<\/Code><Message>body does not match x-amz-content-sha256</);
+    assert.deepEqual(puts, []);
+  });
+
+  await t.test('a body shorter than its declared length stalls into 408; bytes past it are not body', async () => {
+    const quick = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, bodyIdleMs: 200,
+    });
+    try {
+      const to = await quick.listen(0);
+      /** The first response's status line; the socket stays open, as a client waiting on more would. */
+      const raw = (bytes) => new Promise((resolve, reject) => {
+        const socket = connect(to, '127.0.0.1', () => socket.write(bytes));
+        let text = '';
+        socket.on('data', (d) => {
+          text += d;
+          if (text.includes('\r\n')) {
+            socket.destroy();
+            resolve(text.slice(0, text.indexOf('\r\n')));
+          }
+        });
+        socket.on('error', reject);
+      });
+      const req = await signed(new URL(`http://gate.test${bucket}/body.bin`), { method: 'PUT', body: '0123456789' });
+      const head = [`PUT ${bucket}/body.bin HTTP/1.1`, 'host: gate.test', 'content-length: 10', ...[...req.headers].map(([k, v]) => `${k}: ${v}`), '', ''].join('\r\n');
+      assert.equal(await raw(`${head}0123`), 'HTTP/1.1 408 Request Timeout');
+      puts.length = 0;
+      // What follows the ten bytes is the start of a next request, which never finishes.
+      assert.equal(await raw(`${head}0123456789GET / HTTP/1.1\r\n`), 'HTTP/1.1 200 OK');
+      assert.deepEqual(puts.map(String), ['0123456789']);
+    } finally {
+      await quick.close();
+    }
+  });
+
+  await t.test('a presigned GET passes Range through and answers 206', async () => {
+    const res = await call(`${bucket}/Media/video.mp4`, { presigned: true, headers: { range: 'bytes=100-199' } });
+    assert.equal(res.status, 206);
+    assert.equal(res.headers['content-range'], 'bytes 100-199/1000');
+    assert.equal(res.headers['content-length'], '100');
+    assert.equal(res.headers['cache-control'], 'private, max-age=7200, immutable');
+  });
+
   await t.test('object responses are sandboxed and only presigned Media GETs are cached', async () => {
     for (const [method, presigned] of [['GET', false], ['GET', true], ['HEAD', false]]) {
       const res = await call(media, { method, presigned });
@@ -157,14 +310,58 @@ test('gate HTTP requests and responses', async (t) => {
     }
   });
 
-  await t.test('upstream requests time out with S3 XML', async (subtest) => {
-    const timeout = AbortSignal.timeout;
+  await t.test('a quoted "*" in If-Match or If-None-Match is refused; a plain tag goes up bare', async () => {
+    puts.length = 0;
+    for (const headers of [{ 'if-match': '"*"' }, { 'if-none-match': 'W/"*"' }, { 'if-match': '"abc", "*"' }, { 'if-match': '" * "' }, { 'if-none-match': 'W/" *"' }]) {
+      const res = await call(`${bucket}/body.bin`, { method: 'PUT', headers });
+      assert.equal(res.status, 400);
+      assert.match(res.text, /<Code>InvalidArgument<\/Code>/);
+    }
+    assert.deepEqual(puts, []);
+    putHeaders.length = 0;
+    assert.equal((await call(`${bucket}/body.bin`, { method: 'PUT', headers: { 'if-match': '"abc"' } })).status, 200);
+    assert.equal(putHeaders[0]['if-match'], 'abc');
+  });
+
+  await t.test('a client that leaves stops the upstream PUT, which held its share of the buffer until then', async () => {
+    const small = await createGate({
+      ...KEY, masterKey, dataKey: 'none', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      allowedHosts: 'gate.test', log: () => {}, maxBodyBytes: 100, maxBufferedBytes: 100,
+    });
+    try {
+      const to = await small.listen(0);
+      const body = 'x'.repeat(80);
+      const req = await signed(new URL(`http://gate.test${bucket}/slow`), { method: 'PUT', body });
+      const head = [`PUT ${bucket}/slow HTTP/1.1`, 'host: gate.test', `content-length: ${body.length}`,
+        ...[...req.headers].map(([k, v]) => `${k}: ${v}`), '', ''].join('\r\n');
+      const arrived = new Promise((resolve) => { onSlowPut = resolve; });
+      const socket = connect(to, '127.0.0.1', () => socket.write(head + body));
+      const upstreamRes = await arrived;
+      // Still in flight upstream, so its 80 bytes still count.
+      const second = { method: 'PUT', body: 'y'.repeat(80), signBody: true, to };
+      assert.equal((await call(`${bucket}/body.bin`, second)).status, 503);
+      const stopped = new Promise((resolve) => { upstreamRes.on('close', resolve); });
+      socket.destroy();
+      await stopped;
+      assert.equal((await call(`${bucket}/body.bin`, second)).status, 200);
+    } finally {
+      onSlowPut = () => {};
+      await small.close();
+    }
+  });
+
+  await t.test('stalled upstream requests time out with S3 XML, after a garbage collection', { timeout: 10_000 }, async (subtest) => {
+    // undici's Request follows its signal through a weak reference, and the
+    // timer holds a timeout signal weakly: only the gate holding both keeps
+    // the deadline once a collection runs (with --expose-gc).
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
     subtest.mock.method(AbortSignal, 'timeout', (ms) => {
       assert.equal(ms, 60_000);
-      return timeout(100);
+      setTimeout(() => globalThis.gc?.(), 100);
+      return timeout(300);
     });
-    for (const key of ['slow', 'slow-error']) {
-      const res = await call(`${bucket}/${key}`);
+    for (const [key, method] of [['slow', 'GET'], ['slow-error', 'GET'], ['slow', 'PUT']]) {
+      const res = await call(`${bucket}/${key}`, { method, body: method === 'PUT' ? 'x' : undefined, signBody: true });
       assert.equal(res.status, 504);
       assert.match(res.text, /<Error><Code>GatewayTimeout<\/Code><Message>/);
     }
@@ -218,13 +415,11 @@ describe('sigv4 header form', () => {
     assert.equal(result.error, 'x-amz-date outside the window');
   });
 
-  test('a body that does not match the declared hash is rejected', async () => {
+  test('the declared body hash comes back for the caller to check against the body', async () => {
     const input = await signed('https://server.example.org/b/k', { method: 'PUT', body: 'hello' });
-    assert.equal((await verifySignature(input)).error, undefined);
-    assert.equal(
-      (await verifySignature({ ...input, body: Buffer.from('hellp') })).error,
-      'body does not match x-amz-content-sha256',
-    );
+    const out = await verifySignature(input);
+    assert.equal(out.error, undefined);
+    assert.equal(out.payloadHash, await sha256hex('hello'));
   });
 
   test('UNSIGNED-PAYLOAD is refused', async () => {

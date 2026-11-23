@@ -48,9 +48,6 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
   }
   const base = new URL(endpoint);
   const credentials = { accessKeyId, secretAccessKey, service: 's3', region };
-  // Client traffic is never retried here: a proxied PUT is the caller's to
-  // retry. The gate's own small reads keep aws4fetch's default retries.
-  const passthrough = new AwsClient({ ...credentials, retries: 0 });
   const aws = new AwsClient(credentials);
 
   const url = (bucket, key = '', query) => {
@@ -65,7 +62,7 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
   // sets `content-length`, `connection` or `host`, which the runtime rewrites
   // after signing.
   const keys = new Map();
-  const signAll = (u, init) => {
+  const signAll = (u, { signal, ...init }, deadline) => {
     const headers = new Headers(init.headers);
     // Object reads and writes carry the bucket's key; listings and bucket
     // calls have no object and carry none. Unencrypted objects stored before
@@ -79,12 +76,49 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
       for (const [name, value] of Object.entries(keys.get(bucket))) headers.set(name, value);
     }
     return {
-      ...init, headers, signal: AbortSignal.timeout(60_000), redirect: 'manual',
+      ...init, headers, redirect: 'manual',
+      signal: signal ? AbortSignal.any([deadline, signal]) : deadline,
       aws: { ...init.aws, allHeaders: true },
     };
   };
-  const send = (u, init = {}) => passthrough.fetch(u, signAll(u, init));
-  const sendMeta = (u, init = {}) => aws.fetch(u, signAll(u, init));
+  // A body is a list of buffers, signed by its declared x-amz-content-sha256,
+  // and goes as a stream of views into them: given a buffer, undici copies it
+  // once into the Request and again on the way out.
+  const send = async (u, { body, ...init } = {}) => {
+    const deadline = AbortSignal.timeout(60_000);
+    const options = signAll(u, init, deadline);
+    const signed = await aws.sign(u, options);
+    if (!body) return fetchHeld(signed, deadline, options.signal);
+    const headers = new Headers(signed.headers);
+    headers.set('content-length', String(body.reduce((n, part) => n + part.length, 0)));
+    let part = 0;
+    let at = 0;
+    const views = new ReadableStream({
+      pull(controller) {
+        while (part < body.length && at >= body[part].length) {
+          part += 1;
+          at = 0;
+        }
+        if (part === body.length) return controller.close();
+        controller.enqueue(body[part].subarray(at, (at += 1 << 20)));
+        return undefined;
+      },
+    });
+    return fetchHeld(new Request(signed.url, {
+      method: signed.method, headers, body: views, duplex: 'half',
+      signal: options.signal, redirect: 'manual',
+    }), deadline, options.signal);
+  };
+  // Client traffic is never retried: a proxied PUT is the caller's to retry.
+  // The gate's own small reads and writes retry a 5xx or 429 as aws4fetch does.
+  const sendMeta = async (u, init = {}) => {
+    for (let i = 0; ; i += 1) {
+      const deadline = AbortSignal.timeout(60_000);
+      const res = await fetchHeld(await aws.sign(u, signAll(u, init, deadline)), deadline);
+      if (i === 10 || (res.status < 500 && res.status !== 429)) return res;
+      await new Promise((resolve) => { setTimeout(resolve, Math.random() * 50 * 2 ** i); });
+    }
+  };
 
   return {
     origin: base,
@@ -170,6 +204,18 @@ export function makeUpstream({ endpoint, region = 'us-east-1', accessKeyId, secr
       return all;
     },
   };
+}
+
+// undici's Request follows its signal through a weak reference, and a timer
+// holds its timeout signal weakly too, so once either is collected the abort
+// is lost and a stalled upstream waits out Node's own timeouts. The response
+// body, or the response when it has none, keeps both alive until the upstream
+// I/O settles.
+const inFlight = new WeakMap();
+async function fetchHeld(request, ...signals) {
+  const res = await fetch(request);
+  inFlight.set(res.body ?? res, [request, ...signals]);
+  return res;
 }
 
 // MinIO, like any Go encoder, writes `"` as `&#34;`; every ETag in a listing

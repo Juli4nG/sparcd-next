@@ -26,6 +26,8 @@ export const escapeXml = (s) =>
 export const encodeRfc3986 = (s) =>
   encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 
+export const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
 // S3's own tolerance. A signature stays replayable inside the window.
 export const MAX_CLOCK_SKEW_MS = 15 * 60 * 1000;
 
@@ -120,13 +122,15 @@ async function signatureFor({ secretAccessKey, scopeParts, amzDate, canonicalReq
 /**
  * Recompute the caller's SigV4 signature and compare it.
  *
- * Returns `{ accessKeyId, presigned, expires, signedHeaders }` when authentic,
- * or `{ error }`. `url` must be the request exactly as it arrived; `host` is
- * read from it, not from the header. A header-signed request must declare the
- * real body hash: UNSIGNED-PAYLOAD and streaming payloads are refused.
+ * Returns `{ accessKeyId, presigned, expires, signedHeaders, payloadHash }`
+ * when authentic, or `{ error }`. `url` must be the request exactly as it
+ * arrived; `host` is read from it, not from the header. A header-signed
+ * request must declare a body hash: UNSIGNED-PAYLOAD and streaming payloads
+ * are refused. The body is not read here, so the caller checks it against
+ * `payloadHash`.
  */
 export async function verifySignature({
-  method, url, headers, body, lookupSecret, allowPresigned = false, now = Date.now(),
+  method, url, headers, lookupSecret, allowPresigned = false, now = Date.now(),
 }) {
   const presigned = allowPresigned && url.searchParams.has('X-Amz-Algorithm');
   // A presigned URL is a bearer token that travels in logs and chat messages.
@@ -190,15 +194,9 @@ export async function verifySignature({
     if (Math.abs(now - signedAt) > MAX_CLOCK_SKEW_MS) return { error: 'x-amz-date outside the window' };
     if (amzDate.slice(0, 8) !== date) return { error: 'x-amz-date does not match the credential scope' };
 
-    // The signature covers the declared hash, not the bytes. Checking the
-    // declaration against the body stops a captured PUT being replayed inside
-    // the window with different contents.
     if (payloadHash === 'UNSIGNED-PAYLOAD') return { error: 'UNSIGNED-PAYLOAD is not accepted' };
     if (!/^[0-9a-f]{64}$/.test(payloadHash)) {
       return { error: `unsupported x-amz-content-sha256: ${payloadHash}` };
-    }
-    if (await sha256hex(body ?? new ArrayBuffer(0)) !== payloadHash) {
-      return { error: 'body does not match x-amz-content-sha256' };
     }
   }
 
@@ -228,5 +226,5 @@ export async function verifySignature({
     canonicalRequest,
   });
   if (!constantTimeEqual(expected, signature)) return { error: 'signature mismatch' };
-  return { accessKeyId, presigned, expires, signedHeaders: signed };
+  return { accessKeyId, presigned, expires, signedHeaders: signed, payloadHash };
 }

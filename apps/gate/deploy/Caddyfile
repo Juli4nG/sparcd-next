@@ -8,11 +8,20 @@
 			header_up Host {http.request.hostport}
 		}
 	}
+	# CSV and JSON reads go out compressed; photos are already compressed and pass as they are.
 	handle /sparcd-next-* {
+		encode zstd gzip
 		reverse_proxy 127.0.0.1:8787 {
 			header_up Host {http.request.hostport}
 		}
 	}
+
+	# The earlier versions' addresses.
+	redir /simple/upload* /upload/
+	redir /classic/upload* /upload/
+	redir /simple/tag* /tag/
+	redir /classic/tag* /tag/
+	redir /simple* /
 
 	redir /upload /upload/
 	handle_path /upload/* {
@@ -34,5 +43,36 @@
 		root * /srv/sparcd-next/home
 		encode zstd gzip
 		file_server
+	}
+}
+
+# Upload shards: the same gate on seven more ports, so a browser opens more
+# connections in parallel. Host carries the port, which the client signed.
+# Pages are served only from the 443 origin, so that is the one CORS origin.
+{$SITE_ADDRESS}:8443, {$SITE_ADDRESS}:8444, {$SITE_ADDRESS}:8445, {$SITE_ADDRESS}:8446, {$SITE_ADDRESS}:8447, {$SITE_ADDRESS}:8448, {$SITE_ADDRESS}:8449 {
+	@preflight method OPTIONS
+	handle @preflight {
+		header Access-Control-Allow-Origin "https://{$SITE_ADDRESS}"
+		header Access-Control-Allow-Methods "GET, PUT, POST, HEAD"
+		header Access-Control-Allow-Headers "authorization, content-type, content-md5, if-none-match, range, x-amz-content-sha256, x-amz-date, x-amz-security-token, x-amz-user-agent"
+		header Access-Control-Max-Age "600"
+		respond "" 204
+	}
+	handle /-/* {
+		header Access-Control-Allow-Origin "https://{$SITE_ADDRESS}"
+		header Access-Control-Expose-Headers "ETag"
+		reverse_proxy 127.0.0.1:8787 {
+			header_up Host {http.request.hostport}
+		}
+	}
+	handle /sparcd-next-* {
+		header Access-Control-Allow-Origin "https://{$SITE_ADDRESS}"
+		header Access-Control-Expose-Headers "ETag"
+		reverse_proxy 127.0.0.1:8787 {
+			header_up Host {http.request.hostport}
+		}
+	}
+	handle {
+		respond 404
 	}
 }

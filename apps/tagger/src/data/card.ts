@@ -5,7 +5,7 @@ import {
   mergeMedia,
   parseLab,
   parseSpecies,
-  readPackage,
+  readTable,
   replaceObservations,
   savePackage,
   tagRows,
@@ -16,13 +16,14 @@ import {
   type Changes,
   type Deployment,
   type Media,
+  type Observation,
   type PackageRows,
   type Session,
   type Species,
 } from '@sparcd/bucket';
 import { tagState, tagsFromRows, toBucketTags, type PhotoTag } from './tags';
 
-export type ImageSize = 'thumb' | 'view';
+export type ImageSize = 'thumb' | 'view' | 'original';
 
 /**
  * One card's photos and tags, as any tagging screen needs them. `own` is false
@@ -37,6 +38,8 @@ export type Card = {
   tags: Map<string, PhotoTag[]>;
   own: boolean;
   imageUrl: (mediaID: string, size: ImageSize, fresh?: boolean) => Promise<string>;
+  /** Every card at this card's site and their tags, to rank the species buttons. */
+  site: { cards: Set<string>; observations: Observation[] };
 };
 
 export type CardSummary = { deployment: Deployment; photos: number; tagged: number; untagged: number };
@@ -50,10 +53,14 @@ export async function loadSettings(session: Session): Promise<{ about: About; sp
 }
 
 /** The person's own cards, newest first. */
+export const ownCards = (deployments: Deployment[]): Deployment[] =>
+  deployments.filter((d) => !isShared(d)).sort((a, b) => instant(b.deploymentEnd) - instant(a.deploymentEnd));
+
+/** The person's own cards with their counts, newest first. */
 export function cardSummaries(rows: PackageRows): CardSummary[] {
   const tags = tagsFromRows(rows.observations);
   const byCard = new Map<string, CardSummary>();
-  for (const d of rows.deployments) if (!isShared(d)) byCard.set(d.deploymentID, { deployment: d, photos: 0, tagged: 0, untagged: 0 });
+  for (const d of ownCards(rows.deployments)) byCard.set(d.deploymentID, { deployment: d, photos: 0, tagged: 0, untagged: 0 });
   for (const m of rows.media) {
     const card = byCard.get(m.deploymentID);
     if (!card) continue;
@@ -61,19 +68,31 @@ export function cardSummaries(rows: PackageRows): CardSummary[] {
     if (tagState(tags.get(m.mediaID)) === 'untagged') card.untagged++;
     else card.tagged++;
   }
-  return [...byCard.values()].sort((a, b) => instant(b.deployment.deploymentEnd) - instant(a.deployment.deploymentEnd));
+  return [...byCard.values()];
 }
+
+const readRows = async (bucket: Bucket): Promise<PackageRows> => {
+  const [deployments, media, observations] = await Promise.all([readTable(bucket, 'deployments'), readTable(bucket, 'media'), readTable(bucket, 'observations')]);
+  return { deployments, media, observations };
+};
+
+/** Each upload's counts, for the list of photos to tag. */
+export const readCards = (bucket: Bucket): Promise<CardSummary[]> => readRows(bucket).then(cardSummaries);
 
 export const byTime = (a: Media, b: Media) =>
   instant(a.timestamp) - instant(b.timestamp) || (a.fileName ?? '').localeCompare(b.fileName ?? '', 'en', { numeric: true });
 
 const hour = () => Math.floor(Date.now() / 3_600_000);
 
-/** Hour-stable signed URLs, so `<img>` sources repeat within the hour and the browser cache hits. */
-export function bucketImages(bucket: Bucket): Card['imageUrl'] {
+/**
+ * Hour-stable signed URLs, so `<img>` sources repeat within the hour and the browser cache hits.
+ * `originals` maps the person's own photos to their stored file; a row copied from a share has
+ * no original to show, so its view.jpg stands in.
+ */
+export function bucketImages(bucket: Bucket, originals: Map<string, string>): Card['imageUrl'] {
   const cache = new Map<string, { hour: number; url: Promise<string> }>();
   return (mediaID, size, fresh) => {
-    const key = size === 'thumb' ? thumbKey(mediaID) : viewKey(mediaID);
+    const key = size === 'thumb' ? thumbKey(mediaID) : size === 'view' ? viewKey(mediaID) : (originals.get(mediaID) ?? viewKey(mediaID));
     const hit = cache.get(key);
     if (!fresh && hit?.hour === hour()) return hit.url;
     const url = bucket.presignGet(key, { hourStable: !fresh });
@@ -85,7 +104,7 @@ export function bucketImages(bucket: Bucket): Card['imageUrl'] {
 
 /** Null when the person has no such card. */
 export async function loadCard(session: Session, deploymentID: string): Promise<Card | null> {
-  const rows = await readPackage(session.bucket);
+  const rows = await readRows(session.bucket);
   const deployment = rows.deployments.find((d) => d.deploymentID === deploymentID);
   if (!deployment) return null;
   const photos = rows.media.filter((m) => m.deploymentID === deploymentID).sort(byTime);
@@ -96,7 +115,11 @@ export async function loadCard(session: Session, deploymentID: string): Promise<
     photos,
     tags: tagsFromRows(observations),
     own: !isShared(deployment),
-    imageUrl: bucketImages(session.bucket),
+    imageUrl: bucketImages(session.bucket, new Map(photos.filter(isOwnRow).map((m) => [m.mediaID, m.filePath]))),
+    site: {
+      cards: new Set(rows.deployments.filter((d) => d.locationID === deployment.locationID).map((d) => d.deploymentID)),
+      observations: rows.observations,
+    },
   };
 }
 

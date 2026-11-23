@@ -10,7 +10,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,21 +20,74 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Camtrap and bucket libraries
-        run: |
-          pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" test
-          pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" check
+      - name: Typecheck
+        run: pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" --filter "@sparcd/auth-ui" --filter uploader --filter tagger check
+
+      - name: Libraries
+        run: pnpm --filter "@sparcd/camtrap" --filter "@sparcd/bucket" --filter "@sparcd/auth-ui" test
 
       - name: Uploader
-        run: |
-          pnpm --filter uploader test
-          pnpm --filter uploader check
+        run: pnpm --filter uploader test
 
       - name: Tagger
-        if: hashFiles('apps/tagger/package.json') != ''
-        run: |
-          pnpm --filter tagger test
-          pnpm --filter tagger check
+        run: pnpm --filter tagger test
 
       - name: Gate unit tests
         run: pnpm --filter gate test
+
+      - name: Build
+        run: pnpm --filter uploader --filter tagger build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache MinIO and Caddy
+        uses: actions/cache@v4
+        with:
+          path: apps/gate/local/bin
+          key: local-bins-${{ runner.os }}-${{ hashFiles('apps/gate/local/bins.mjs') }}
+
+      - name: Cache Playwright browsers
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Chromium system libraries
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps chromium
+
+      - name: Build
+        run: pnpm --filter uploader --filter tagger build
+
+      - name: Start the local stack
+        run: node apps/gate/local/up.mjs
+
+      - name: Browser tests
+        run: pnpm --filter e2e test:browser
+
+      - name: Stop the local stack
+        if: always()
+        run: node apps/gate/local/down.mjs
+
+      - name: Keep traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: e2e/test-results
+          retention-days: 7

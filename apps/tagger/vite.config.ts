@@ -25,7 +25,7 @@ export default defineConfig({
   base: '/tag/',
   plugins: [originConfig, react()],
   server: {
-    port: 5190,
+    port: 5192,
     strictPort: true,
     proxy: { '/-/': GATE, '/sparcd-next-': GATE },
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripJpeg } from '../src/lib/stripJpeg';
+import { stripJpeg } from '../src/send/stripJpeg';
 
 const seg = (marker: number, payload: string) => {
   const body = new TextEncoder().encode(payload);

@@ -35,8 +35,8 @@ Environment variables, kept in a 0600 file:
 | `SETTINGS_BUCKET` | `sparcd-next-settings` | |
 | `BUCKET_ALLOW` | `sparcd-next-*` | nothing outside it is ever touched |
 | `PORT` | `8787` | always bound to 127.0.0.1 |
-| `MAX_BODY_BYTES` | 64 MiB | one request body |
-| `MAX_BUFFERED_BYTES` | 512 MiB | all bodies in flight; a quarter per person |
+| `MAX_BODY_BYTES` | 256 MiB | one request body |
+| `MAX_BUFFERED_BYTES` | 512 MiB | all bodies in flight; per person a quarter, or one whole body if that is more |
 
 If the upstream's certificate chain fails, run with
 `NODE_OPTIONS=--use-system-ca`.
@@ -59,7 +59,7 @@ node --env-file=<env file> cli.mjs settings put lab.json sites.csv species.json
 The password is the only thing on stdout. The CLI never deletes anything.
 `settings-example/` holds a made-up lab, sites and species list to start from.
 
-## Local recipe (Windows or Apple-silicon Mac)
+## Local recipe (Windows, Apple-silicon Mac or Linux x64)
 
 One origin, `http://localhost:8080`, laid out like the server:
 
@@ -100,7 +100,8 @@ SMOKE_ENDPOINT=http://localhost:8080 SMOKE_LOGIN=ana SMOKE_PASSWORD="$ANA_PASSWO
 ### Vite dev servers
 
 A dev server proxies to the gate with its own Host, which is what the browser
-signs. Ports 5173 to 5176 are in the local `ALLOWED_HOSTS`.
+signs. The Uploader and Tagger dev ports, 5191 and 5192, and ports 5173 to 5176
+are in the local `ALLOWED_HOSTS`.
 
 ```js
 // vite.config.ts

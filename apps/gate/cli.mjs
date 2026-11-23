@@ -4,6 +4,7 @@
 // A new password is the only thing written to stdout; everything else goes to
 // stderr. Nothing here deletes a bucket or an object.
 
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -165,7 +166,8 @@ export function openAdmin(env = process.env) {
               if (KEEP_ON_REWRITE.has(name) || name.startsWith('x-amz-meta-')) headers[name] = value;
             }
             const body = Buffer.from(await got.arrayBuffer());
-            const put = await patient(() => upstream.send(upstream.url(bucket, key), { method: 'PUT', body, headers }));
+            headers['x-amz-content-sha256'] = createHash('sha256').update(body).digest('hex');
+            const put = await patient(() => upstream.send(upstream.url(bucket, key), { method: 'PUT', body: [body], headers }));
             if (put.status === 412) { count.changed += 1; continue; }
             if (!put.ok) throw new Error(`PUT ${bucket}/${key} → ${put.status} ${await put.text()}`);
             count.encrypted += 1;

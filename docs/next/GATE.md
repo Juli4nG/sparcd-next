@@ -89,6 +89,9 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   - A PutObject under `Media/` must carry `If-None-Match: *`, and is refused
     without it.
   - The client gets the upstream's 412 back when the file already exists.
+- **Entity tags:** `If-Match` goes upstream without its quotes, which is how
+  RGW compares tags. An `If-Match` or `If-None-Match` carrying the quoted tag
+  `"*"` is a 400, since without quotes it would become the wildcard.
 - **Refused for everyone:**
   - DeleteObject, so nothing is ever deleted through the gate.
   - CopyObject and ListBuckets.
@@ -103,8 +106,12 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   - A response naming any other bucket is a 502.
 - **Payload hashing:**
   - UNSIGNED-PAYLOAD is refused on header-signed requests. Clients send the
-    real body hash, which for a photo PUT is its `mediaID`.
+    real body hash. For a photo or video PUT that is the hash of the stored
+    file, with its camera data removed, so it is not the `mediaID`.
   - Streaming payloads are refused.
+  - The signature is checked before any of the body is read. The body is
+    hashed as it arrives and must match `x-amz-content-sha256`, which then
+    goes upstream as the signed payload hash.
 - **Presigned query-string URLs:**
   - GET and HEAD only, verified with the person's key.
   - `X-Amz-Expires` is at most 7,200 s.
@@ -122,6 +129,7 @@ A request that matches nothing below gets a 403 in S3 XML shape.
   `Content-Security-Policy: sandbox; default-src 'none'`.
 - Upstream errors use S3 XML with a gate message. Upstream fetches have a
   60-second deadline and return 504 if it expires before the response starts.
+  A client that disconnects stops its upstream request.
 - A paused person gets 403 on everything.
 
 ## Encryption at rest
@@ -187,6 +195,8 @@ CLI (`node apps/gate/cli.mjs …`, run where the gate's env file is):
 | `BUCKET_ALLOW` | `sparcd-next-*` |
 | `ALLOWED_HOSTS` | `server.example.org` (the Host clients sign) |
 | `PORT` | `8787` |
+| `MAX_BODY_BYTES` | `268435456` (256 MiB, the default): one request body; bigger is a 413 |
+| `MAX_BUFFERED_BYTES` | `536870912` (512 MiB, the default): all bodies held in memory at once. A person may hold a quarter of it, or one whole body if that is more; past that a PUT gets 503 `SlowDown` |
 
 Node uses its bundled CA list. If the upstream's certificate chain fails, run
 the gate with `NODE_OPTIONS=--use-system-ca`.

@@ -1,56 +1,5 @@
+@import '../../../packages/auth-ui/src/app/look.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Field Notebook v2, the old Tagger's palette. */
-:root {
-  --paper: #f4ecd8;
-  --paperHover: #efe6cc;
-  --panel: #fbf7eb;
-  --panelHover: #f5efe0;
-  --ink: #1c1a14;
-  --inkSoft: #4a463b;
-  --inkMute: #6b6555;
-  --rule: #8c8166;
-  --ruleSoft: #cfc4a8;
-  --accent: #0b3358;
-  --accentSoft: #dfe7ef;
-  --warn: #8a3818;
-  --ok: #33602e;
-  --mark: #ead8a3;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  height: 100dvh;
-}
-
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: 'Inter Tight', Inter, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-}
-
-/* A thumbnail's placeholder while its photo downloads. */
-@keyframes fn-breathe {
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.fn-breathe {
-  opacity: 0.25;
-  animation: fn-breathe 1.6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fn-breathe {
-    animation: none;
-    opacity: 0.4;
-  }
-}
